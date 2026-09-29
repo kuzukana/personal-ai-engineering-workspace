@@ -6,8 +6,8 @@ from typing import Any
 
 import httpx
 
+import app.ai.providers.base as provider_base
 import app.ai.schemas as ai_schemas
-from app.ai.providers.base import ProviderAdapter
 
 
 _FINISH_REASON_MAP = {
@@ -18,7 +18,7 @@ _FINISH_REASON_MAP = {
 }
 
 
-class OpenAICompatibleProvider(ProviderAdapter):
+class OpenAICompatibleProvider(provider_base.ProviderAdapter):
     def __init__(
         self,
         *,
@@ -163,7 +163,10 @@ class OpenAICompatibleProvider(ProviderAdapter):
             provider_metadata={"id": body.get("id")},
         )
 
-    async def stream(self, request: ai_schemas.ModelRequest) -> AsyncIterator[ai_schemas.ModelEvent]:
+    async def stream(
+        self,
+        request: ai_schemas.ModelRequest,
+    ) -> AsyncIterator[ai_schemas.ModelEvent]:
         yield ai_schemas.ModelEvent(
             type="model.started",
             payload={"model_id": request.model_id, "provider": self.name},
