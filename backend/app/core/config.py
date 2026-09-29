@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     kimi_model: str | None = None
     kimi_base_url: str | None = None
 
+    brave_search_api_key: str | None = None
+    github_token: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

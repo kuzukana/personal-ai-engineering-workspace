@@ -11,7 +11,7 @@ from app.ai.container import model_gateway
 from app.ai.schemas import ChatMessage, ModelRequest
 from app.events.publisher import event_publisher
 from app.runtime.run_control import run_control
-from app.tools.gateway import tool_gateway
+from app.tools.container import tool_gateway
 
 
 class ResearchState(TypedDict, total=False):
