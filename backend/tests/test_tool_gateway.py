@@ -1,6 +1,6 @@
 import pytest
 
-from app.tools.gateway import ToolGateway, MockWebSearchTool
+from app.tools.gateway import MockWebSearchTool, ToolGateway
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
-import pytest
+from datetime import UTC, datetime
 from uuid import uuid4
-from datetime import datetime, timezone
+
+import pytest
 
 from app.events.broker import EventBroker
 from app.events.schemas import EventEnvelope
@@ -16,7 +17,7 @@ async def test_event_broker_publishes_to_subscriber() -> None:
         run_id=run_id,
         sequence=1,
         type="run.started",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         source="test",
         payload={},
     )
