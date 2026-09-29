@@ -46,6 +46,13 @@ jobs:
         run: pytest -q
       - name: Migration
         run: alembic upgrade head
+      - name: End-to-end smoke
+        run: |
+          set -e
+          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/workspace-api.log 2>&1 &
+          API_PID=$!
+          trap 'kill $API_PID >/dev/null 2>&1 || true; cat /tmp/workspace-api.log' EXIT
+          python scripts/smoke_research.py
 
   frontend:
     runs-on: ubuntu-latest
