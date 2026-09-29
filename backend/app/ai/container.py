@@ -1,6 +1,7 @@
 from app.ai.gateway import ModelGateway
 from app.ai.providers.mock import MockProvider
 from app.ai.registry import ModelRegistry, RegisteredModel
+from app.domain.constants import MOCK_MODEL_ID
 
 
 def build_model_gateway() -> ModelGateway:
@@ -8,7 +9,7 @@ def build_model_gateway() -> ModelGateway:
     mock = MockProvider()
     registry.register(
         RegisteredModel(
-            id="mock/mock-1",
+            id=str(MOCK_MODEL_ID),
             provider="mock",
             model_key="mock-1",
             display_name="Mock Model",
