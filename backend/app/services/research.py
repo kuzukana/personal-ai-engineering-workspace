@@ -14,6 +14,8 @@ from app.events.publisher import event_publisher
 class ResearchService:
     async def create_run(self, query: str, model_id: UUID) -> Run:
         async with SessionLocal() as session:
+            registered_model = model_gateway.registry.get(str(model_id))
+            await ensure_registered_model(session, model_id, registered_model)
             run = Run(
                 agent_version_id=RESEARCH_AGENT_VERSION_ID,
                 model_id=model_id,

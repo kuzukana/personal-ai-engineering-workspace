@@ -21,9 +21,19 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
 
     openai_api_key: str | None = None
+    openai_model: str | None = None
+    openai_base_url: str = "https://api.openai.com/v1"
+
     anthropic_api_key: str | None = None
+    anthropic_model: str | None = None
+
     deepseek_api_key: str | None = None
+    deepseek_model: str | None = None
+    deepseek_base_url: str | None = None
+
     kimi_api_key: str | None = None
+    kimi_model: str | None = None
+    kimi_base_url: str | None = None
 
 
 @lru_cache

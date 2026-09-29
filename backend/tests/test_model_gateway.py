@@ -11,11 +11,11 @@ def build_gateway() -> ModelGateway:
     registry = ModelRegistry()
     registry.register(
         RegisteredModel(
-            id="mock/test",
+            id="internal-model-id",
             provider="mock",
-            model_key="test",
+            model_key="vendor-model-key",
             display_name="Test",
-            capabilities=provider.capabilities("test"),
+            capabilities=provider.capabilities("vendor-model-key"),
         )
     )
     gateway = ModelGateway(registry)
@@ -24,27 +24,29 @@ def build_gateway() -> ModelGateway:
 
 
 @pytest.mark.asyncio
-async def test_generate_uses_registered_provider() -> None:
+async def test_generate_uses_registered_provider_and_preserves_internal_id() -> None:
     gateway = build_gateway()
     request = ModelRequest(
-        model_id="mock/test",
+        model_id="internal-model-id",
         messages=[ChatMessage(role="user", content="hi")],
     )
     response = await gateway.generate(request)
     assert response.provider == "mock"
     assert response.content == "hello world"
+    assert response.model_id == "internal-model-id"
     assert response.usage.total_tokens is not None
 
 
 @pytest.mark.asyncio
-async def test_stream_normalizes_events() -> None:
+async def test_stream_normalizes_events_and_internal_model_id() -> None:
     gateway = build_gateway()
     request = ModelRequest(
-        model_id="mock/test",
+        model_id="internal-model-id",
         messages=[ChatMessage(role="user", content="hi")],
         stream=True,
     )
     events = [event async for event in gateway.stream(request)]
     assert events[0].type == "model.started"
+    assert events[0].payload["model_id"] == "internal-model-id"
     assert any(event.type == "model.text.delta" for event in events)
     assert events[-1].type == "model.completed"
