@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -23,7 +23,7 @@ class EventPublisher:
             select(func.coalesce(func.max(RunEvent.sequence), 0)).where(RunEvent.run_id == run_id)
         )
         sequence = int(result.scalar_one()) + 1
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         row = RunEvent(
             id=uuid4(),
             run_id=run_id,

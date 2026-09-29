@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -38,7 +38,7 @@ class ResearchService:
             return run
 
     async def execute(self, run_id: UUID, query: str, model_id: UUID) -> None:
-        started = datetime.now(timezone.utc)
+        started = datetime.now(UTC)
         async with SessionLocal() as session:
             try:
                 run = await session.get(Run, run_id)
@@ -134,7 +134,7 @@ class ResearchService:
                     {"metric_count": len(evaluations)},
                 )
 
-                finished = datetime.now(timezone.utc)
+                finished = datetime.now(UTC)
                 run = await session.get(Run, run_id)
                 if run is None:
                     return
@@ -160,7 +160,7 @@ class ResearchService:
                     run.status = "FAILED"
                     run.error_code = "WORKFLOW_ERROR"
                     run.error_message = "Research workflow failed"
-                    run.completed_at = datetime.now(timezone.utc)
+                    run.completed_at = datetime.now(UTC)
                     await session.commit()
                     await event_publisher.emit(
                         session,
