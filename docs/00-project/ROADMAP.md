@@ -1,7 +1,7 @@
 # Personal AI Engineering Workspace — Roadmap
 
 **Version:** 0.1  
-**Status:** Active  
+**Status:** V0.1 Implemented  
 **Last Updated:** 2026-09-29
 
 # 1. Goal
@@ -21,100 +21,189 @@ Build a personal AI-native engineering workspace in vertical slices. Every phase
 
 ## Phase 0 — Product / Architecture
 
-Status: Complete.
+**Status: Complete.**
 
-Deliverables: PRD, Technical Design, AI System Spec, Model Spec, Agent Spec, Evaluation, Data/API/Event contracts, Security, Observability, Test Plan, Deployment, ADRs.
+Implemented documentation includes PRD, Technical Design, Architecture, AI System Spec, Model Spec, Agent Spec, Evaluation, Data/API/Event contracts, Security, Observability, Test Plan, Deployment and ADRs.
 
 ## Phase 1 — Application Foundation
 
-Status: In progress.
+**Status: Complete.**
 
-Deliverables:
+Implemented:
 - FastAPI application;
 - Next.js application;
-- PostgreSQL + Redis development infrastructure;
+- PostgreSQL development infrastructure;
+- Redis development service;
 - settings / health / readiness;
-- CI baseline.
+- Docker Compose;
+- GitHub Actions CI.
 
-Exit: frontend and backend build; backend tests pass; database migration works.
+Verified by CI:
+- backend lint;
+- backend tests;
+- Alembic migration from clean PostgreSQL;
+- frontend typecheck;
+- frontend production build.
 
 ## Phase 2 — Model Gateway
 
-Deliverables:
+**Status: Complete for V0.1.**
+
+Implemented:
 - ProviderAdapter contract;
 - ModelRegistry;
 - MockProvider;
-- OpenAI-compatible adapter;
-- Anthropic adapter direction;
-- normalized usage/error/streaming;
+- OpenAI-compatible HTTP adapter;
+- configurable OpenAI / DeepSeek / Kimi registrations;
+- normalized ModelRequest / ModelResponse / ModelEvent;
+- streaming / usage normalization;
 - model list API.
 
-Exit: same ModelRequest can run through at least Mock + one configured real provider without Agent code changes.
+Native Anthropic adapter remains future work; V0.1 does not claim native Anthropic support.
 
 ## Phase 3 — Run / Event Infrastructure
 
-Deliverables:
-- Run repository/service;
-- Event publisher;
-- monotonic run sequence;
-- SSE endpoint;
-- cancellation;
-- persisted trace.
+**Status: Complete.**
 
-Exit: frontend can observe a streamed mock Run and reconstruct timeline from persisted events.
+Implemented:
+- Run persistence;
+- Event publisher;
+- monotonic per-Run sequence;
+- persisted RunEvent history;
+- SSE endpoint;
+- Last-Event-ID / after_sequence direction;
+- cancellation request;
+- terminal Run states.
 
 ## Phase 4 — Research Agent
 
-Deliverables:
-- LangGraph runtime adapter;
-- Understand → Plan → Search → Read → Verify → Synthesize;
-- Mock search/fetch tools;
-- structured ResearchReport;
-- deterministic evaluation.
+**Status: Complete.**
 
-Exit: a complete research task runs end to end with mocks and produces trace + evaluation.
+Workflow:
+
+```text
+Understand
+→ Plan Search
+→ Search
+→ Select Sources
+→ Read Sources
+→ Extract Findings
+→ Verify
+→ Synthesize
+```
+
+Implemented:
+- LangGraph runtime;
+- Mock model and tools for deterministic development;
+- structured ResearchReport;
+- source provenance;
+- conservative PARTIALLY_VERIFIED / UNVERIFIED handling;
+- deterministic post-run evaluation;
+- live Research UI.
 
 ## Phase 5 — Real Research Tools
 
-Deliverables:
-- web search provider adapter;
-- fetch_url with SSRF protection;
-- GitHub repository research tool;
-- source provenance.
+**Status: Complete for implementation.**
 
-Exit: real technical research can use live sources without changing Agent workflow.
+Implemented:
+- Brave Web Search adapter;
+- `fetch_url` with scheme validation, DNS/IP validation, private-network blocking, redirect revalidation and response-size limits;
+- GitHub repository metadata + README tool;
+- tool configuration through backend environment variables.
+
+When `BRAVE_SEARCH_API_KEY` is absent, Research automatically uses deterministic Mock Search / Mock Fetch.
+
+A paid/external real-provider smoke is intentionally not part of ordinary CI.
 
 ## Phase 6 — Knowledge
 
-Deliverables:
-- save Research to Knowledge;
-- list/detail/search;
-- source links;
-- technology extraction/relations.
+**Status: Complete.**
 
-Exit: past research can be retrieved and reused.
+Implemented:
+- save Research to Knowledge;
+- idempotent promotion by source Research;
+- list / detail / search;
+- Markdown knowledge rendering;
+- source links;
+- Knowledge ↔ Technology relation table;
+- automatic matching against already-known Technologies;
+- manual Knowledge ↔ Technology linking API;
+- Knowledge frontend list/detail.
 
 ## Phase 7 — Capability + Evidence
 
-Deliverables:
-- Technology CRUD;
-- Capability level 0–5;
-- Evidence CRUD;
-- CapabilityEvidence relations.
+**Status: Complete.**
 
-Exit: project work can become explicit evidence for skills.
+Implemented:
+- Technology create / read / update / delete APIs;
+- Capability level 0–5 upsert;
+- reason / next target / next action;
+- Evidence create / read / update / delete APIs;
+- CapabilityEvidence relation;
+- evidence listing by Capability;
+- Capability + Evidence frontend workspace.
 
 ## Phase 8 — Agent Lab
 
-Deliverables:
-- Run list/detail;
-- timeline;
-- model/tool/evaluation metrics;
-- errors and costs.
+**Status: Complete.**
 
-Exit: every Research Run can be inspected without reading backend logs.
+Implemented:
+- Run list;
+- Run detail;
+- persisted timeline;
+- model call count;
+- tool call count;
+- Token aggregation;
+- latency;
+- estimated cost when available;
+- evaluation results;
+- errors;
+- Agent Lab frontend.
 
-# 4. V0.2 — Learning Loop
+# 4. V0.1 System Acceptance
+
+GitHub Actions executes:
+
+```text
+lint
+→ unit / contract tests
+→ Alembic migration
+→ start FastAPI
+→ create Research Run
+→ wait for completion
+→ inspect Research result
+→ inspect Event history
+→ inspect Evaluation
+→ promote Knowledge
+→ create/update Technology
+→ create/update Evidence
+→ update Capability
+→ link Evidence
+→ verify relations
+→ delete CRUD test entities
+→ frontend typecheck/build
+```
+
+This deterministic path uses Mock Model / Mock Research Tools and therefore does not require paid external APIs.
+
+# 5. Known V0.1 Boundaries
+
+Still intentionally deferred:
+- authentication / multi-user authorization;
+- remote production deployment hardening;
+- semantic retrieval / vector search;
+- Learning Agent;
+- Engineering Journal;
+- Coding Agent;
+- shell/filesystem write tools;
+- high-risk approval workflow;
+- multi-agent orchestration;
+- full experiment/benchmark UI;
+- LLM-as-a-Judge;
+- queue/worker execution;
+- automatic GitHub-tool routing inside Research.
+
+# 6. V0.2 — Learning Loop
 
 Planned:
 - semantic retrieval;
@@ -122,19 +211,20 @@ Planned:
 - Engineering Journal;
 - incident knowledge;
 - practice / evidence suggestions;
-- capability-gap workflow.
+- capability-gap workflow;
+- richer Knowledge ↔ Technology extraction.
 
-# 5. V0.3 — Build Loop
+# 7. V0.3 — Build Loop
 
 Planned:
 - Coding Agent;
-- repository tools;
+- repository tools inside Coding workflow;
 - filesystem / terminal sandbox;
 - tests as tools;
 - high-risk Human Approval;
-- GitHub integration.
+- deeper GitHub integration.
 
-# 6. V0.4 — AI Engineering Lab
+# 8. V0.4 — AI Engineering Lab
 
 Planned:
 - experiments;
@@ -143,22 +233,23 @@ Planned:
 - prompt comparison;
 - agent-version comparison;
 - LLM-as-a-Judge;
-- failure taxonomy.
+- failure taxonomy;
+- replay / debugging experiments if real usage justifies them.
 
-# 7. V1.0
+# 9. V1.0 Target
 
-Target loop:
+Product loop:
 
-Capture → Research → Learn → Build → Evidence → Reflect → Improve.
+```text
+Capture → Research → Learn → Build → Evidence → Reflect → Improve
+```
 
-AI loop:
+AI engineering loop:
 
-Task → Agent → Run → Trace → Evaluate → Experiment → Improve.
+```text
+Task → Agent → Run → Trace → Evaluate → Experiment → Improve
+```
 
-# 8. Explicitly Deferred
+# 10. Release Rule
 
-Until real usage proves need: multi-agent orchestration, autonomous long-term memory, agent replay, visual workflow builder, marketplace, team collaboration, billing and mobile app.
-
-# 9. Release Rule
-
-A phase is complete only when its acceptance path runs, tests exist, and the resulting behavior is inspectable. Documentation alone does not count as implementation.
+A phase is complete only when its acceptance path runs, tests exist and the resulting behavior is inspectable. Documentation alone does not count as implementation.

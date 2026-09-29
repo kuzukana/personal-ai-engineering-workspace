@@ -1,49 +1,215 @@
 # Personal AI Engineering Workspace
 
-An AI-native workspace for turning real research, learning and engineering work into reusable knowledge, verifiable capability and evidence.
+An AI-native workspace for turning real research, learning and engineering work into reusable knowledge, verifiable capability and inspectable evidence.
 
 ## Current stage
 
-V0.1 — Research Loop foundation.
+**V0.1 — Research Loop implemented.**
 
-Current priorities:
-- FastAPI + Next.js application skeleton
-- PostgreSQL + Redis infrastructure
-- Model Gateway and provider abstraction
-- Research Agent
-- SSE run events and Agent Lab
-- Knowledge / Capability / Evidence persistence
-- deterministic AI evaluation
+The current vertical slice supports:
+
+- Next.js / React / TypeScript frontend;
+- FastAPI / Python backend;
+- PostgreSQL persistence and Alembic migrations;
+- Model Gateway with a deterministic Mock Provider plus configurable OpenAI-compatible providers;
+- LangGraph Research Agent;
+- normalized Run / Agent / Model / Tool / Evaluation events;
+- SSE live Research timeline;
+- Brave Search adapter and SSRF-protected URL fetching when configured;
+- GitHub repository inspection tool in the Tool Gateway;
+- deterministic Research evaluation;
+- Research → Knowledge promotion;
+- Knowledge ↔ Technology relations;
+- Technology / Capability / Evidence tracking;
+- Agent Lab Run inspection;
+- CI lint, tests, migration, frontend build and end-to-end smoke.
+
+Core loop:
+
+```text
+Research Task
+    ↓
+Research Agent
+    ↓
+Search / Read / Verify / Synthesize
+    ↓
+Run Events + Evaluation
+    ↓
+Knowledge
+    ↓
+Technology / Capability / Evidence
+    ↓
+Agent Lab inspection
+```
 
 ## Architecture
 
-Browser → Next.js → FastAPI → Agent Runtime / Model Gateway / Tool Gateway → PostgreSQL + Redis.
+```text
+Browser
+  ↓
+Next.js
+  ↓ REST / SSE
+FastAPI
+  ├── Research Service
+  ├── Agent Runtime
+  ├── Model Gateway
+  ├── Tool Gateway
+  ├── Evaluation
+  └── Knowledge / Capability APIs
+        ↓
+   PostgreSQL
+```
 
-See docs/00-project/PRD.md and docs/01-design/TECHNICAL_DESIGN.md for the full design.
+Redis is present in the development topology for future runtime/cache/worker use, but V0.1 business state does not depend on Redis.
+
+See:
+
+- `docs/00-project/PRD.md`
+- `docs/00-project/ROADMAP.md`
+- `docs/01-design/TECHNICAL_DESIGN.md`
+- `docs/03-contracts/API_SPEC.md`
 
 ## Local development
 
-1. Copy .env.example to .env and fill only the providers you want to use.
-2. Start infrastructure with Docker Compose.
-3. Run backend and frontend independently during development.
+### 1. Start infrastructure
 
-Backend:
+From the repository root:
 
-    cd backend
-    python -m venv .venv
-    pip install -e .[dev]
-    uvicorn app.main:app --reload
+```bash
+docker compose up -d postgres redis
+```
 
-Frontend will be initialized in the next implementation phase.
+### 2. Configure backend environment
+
+Copy the root example file into the backend working directory:
+
+```bash
+cp .env.example backend/.env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example backend/.env
+```
+
+You can leave all external-provider keys empty. In that case the application runs with deterministic Mock Model / Mock Research Tools.
+
+For live web research, configure:
+
+```text
+BRAVE_SEARCH_API_KEY=
+```
+
+For a real model, configure a provider key plus its model name. Example:
+
+```text
+OPENAI_API_KEY=
+OPENAI_MODEL=
+```
+
+DeepSeek and Kimi can also be configured through the OpenAI-compatible adapter using their model and base URL environment variables.
+
+### 3. Backend
+
+```bash
+cd backend
+python -m venv .venv
+pip install -e ".[dev]"
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+API:
+
+```text
+http://localhost:8000
+```
+
+OpenAPI:
+
+```text
+http://localhost:8000/docs
+```
+
+### 4. Frontend
+
+In a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:3000
+```
+
+## Main product surfaces
+
+- `/research` — run Research Agent tasks and watch the event stream;
+- `/knowledge` — browse promoted Research knowledge;
+- `/capabilities` — maintain Technology, Capability and Evidence;
+- `/lab` — inspect Runs, events, model/tool activity and evaluations.
 
 ## Tests
 
-    cd backend
-    pytest
+Backend:
+
+```bash
+cd backend
+ruff check app tests alembic
+pytest -q
+alembic upgrade head
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run typecheck
+npm run build
+```
+
+GitHub Actions additionally starts the migrated API and runs an end-to-end smoke covering:
+
+```text
+Research
+→ Run completion
+→ Events
+→ Evaluation
+→ Knowledge
+→ Technology
+→ Capability
+→ Evidence
+→ relations
+```
+
+No real paid model/search API is required for the deterministic CI path.
 
 ## Security
 
-Never commit .env or API keys. Provider credentials are backend-only.
+- never commit `.env` or API keys;
+- provider credentials remain backend-only;
+- live `fetch_url` validates public HTTP(S) destinations and re-validates redirects;
+- Research Agent V0.1 only uses LOW-risk tools;
+- external content is treated as untrusted data.
+
+## Known V0.1 limits
+
+- single-user local mode;
+- no authentication yet;
+- Agent execution still uses in-process background tasks;
+- real-provider smoke requires your own credentials and is intentionally separate from deterministic CI;
+- GitHub repository tool exists in the Tool Gateway but is not yet automatically routed by the Research workflow;
+- no semantic retrieval / embeddings yet;
+- no Learning Agent or Coding Agent yet;
+- no multi-agent orchestration yet.
+
+Those are V0.2+ concerns, not hidden V0.1 requirements.
 
 ## Core principle
 

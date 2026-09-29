@@ -1,109 +1,151 @@
 # Personal AI Engineering Workspace — Test Plan
 
 **Version:** 0.1  
-**Status:** Draft  
+**Status:** Implemented for V0.1 baseline  
 **Last Updated:** 2026-09-29
 
-# 1. Purpose
+# 1. Principle
 
-定义 V0.1 自动测试、集成测试、AI Contract Test、回归测试与 CI 质量门槛。
+Deterministic engineering remains deterministic. AI nondeterminism must not make ordinary CI flaky.
 
-# 2. Test Layers
+# 2. Current CI Gates
 
-Unit → Contract → Integration → API → Agent Workflow → Real-provider Smoke。
+Backend:
+- editable install with dev dependencies;
+- Ruff;
+- Pytest;
+- Alembic upgrade from clean PostgreSQL;
+- start FastAPI;
+- end-to-end HTTP smoke.
 
-LLM Judge 不能替代普通单元测试。
+Frontend:
+- npm install;
+- TypeScript typecheck;
+- Next.js production build.
 
-# 3. Backend Unit Tests
+# 3. Current Unit / Contract Coverage
 
-覆盖 settings、error normalization、schema validation、provider capability checking、event envelope、evaluation rules、repository/service logic。
+Implemented tests cover:
+- health endpoints;
+- model registry API;
+- ORM table registration;
+- Model Gateway generate/stream normalization;
+- OpenAI-compatible adapter normalization;
+- Research report schemas;
+- Tool Gateway allowlist;
+- Mock Search / Fetch;
+- Brave Search response normalization;
+- GitHub repository response normalization;
+- URL-fetch SSRF checks;
+- Run cancellation control;
+- event broker;
+- capability level validation;
+- Knowledge Markdown rendering;
+- Run serialization / Agent Lab metrics.
 
-# 4. Frontend Tests
+# 4. Deterministic End-to-End Smoke
 
-覆盖 event reducer、API client、status rendering、model selector 和基础组件逻辑。
+After Alembic migration, CI starts the real FastAPI application and verifies:
 
-# 5. Provider Contract Tests
+```text
+GET models
+→ POST research
+→ wait for terminal Run
+→ GET Research
+→ GET Evaluations
+→ GET Event history
+→ assert required runtime events
+→ assert Token/Cost persistence
+→ create Technology
+→ save Research as Knowledge
+→ verify Knowledge↔Technology
+→ update Technology
+→ upsert Capability
+→ create/update Evidence
+→ link Capability↔Evidence
+→ verify linked Evidence
+→ delete Evidence
+→ delete Technology
+```
 
-所有 Provider Adapter 验证 generate、stream、usage、error normalization、structured output，以及支持时的 tool call。
+The workflow uses Mock Model + Mock Research Tools and therefore does not call paid external APIs.
 
-普通 CI 使用 MockProvider，不消耗真实 API。
+# 5. Real Provider Tests
 
-# 6. MockProvider
+Real model/search tests remain separate from ordinary CI because they:
+- require secrets;
+- cost money;
+- can fail because of external availability;
+- are nondeterministic.
 
-必须支持 fixed text、streamed chunks、scripted tool call、usage、timeout、rate-limit、invalid structured output。
+When credentials are available, they should be run as a manual/secret-backed smoke rather than replacing deterministic CI.
 
-# 7. Tool Contract Tests
+# 6. Security Tests
 
-验证 input/output schema、timeout、error normalization、risk level、redaction。
+Current automated checks include:
+- unsupported Tool rejection;
+- non-http(s) URL rejection;
+- localhost/private/link-local URL rejection;
+- redirect revalidation;
+- public URL acceptance;
+- Provider tests use fake credentials and MockTransport.
 
-# 8. Event Tests
+# 7. Evaluation Tests
 
-验证 required fields、sequence monotonicity、serialization、SSE format、unknown event tolerance、secret redaction。
+Deterministic Research evaluation remains code-driven.
 
-# 9. API Tests
+Current runtime evaluation checks include:
+- ResearchReport schema existence by construction;
+- title present;
+- summary present;
+- source present.
 
-至少覆盖 /health、/ready、/api/v1/models、POST /api/v1/research、GET run、event history、evaluations。
+Future additions:
+- citation coverage;
+- verification coverage;
+- source-quality scoring;
+- LLM-as-a-Judge.
 
-# 10. Database Tests
+# 8. Frontend Verification
 
-验证 Alembic from empty DB、FK、unique constraints、capability level、run event ordering、AgentVersion history。
+Current CI verifies:
+- all TypeScript surfaces compile;
+- all pages and routes included in the Next.js application production build.
 
-# 11. Research Workflow Tests
+Future:
+- component tests;
+- EventSource reducer tests;
+- browser E2E with Playwright.
 
-使用 MockProvider + MockTools 覆盖 happy path、search failure、fetch failure、provider timeout、rate limit、invalid structured output、cancelled run、insufficient source。
+# 9. Regression Strategy
 
-# 12. Evaluation Tests
+Real failures should become deterministic fixtures whenever possible.
 
-DeterministicEvaluator 对固定输入必须可重复，覆盖 valid report、missing title、missing source、invalid URL、evaluator failure。
+Priority regression classes:
+- Provider normalization;
+- schema validation;
+- Run state transitions;
+- Event ordering;
+- cancellation;
+- SSRF;
+- Knowledge promotion;
+- Capability/Evidence relations;
+- migrations.
 
-# 13. Security Tests
+# 10. Known Gaps
 
-验证 .env ignored、secrets redacted、unsupported tool denied、invalid URL rejected、provider secret 不出 API response。
+Not yet implemented as CI gates:
+- Python static typing beyond runtime/Pydantic and Ruff;
+- frontend component/unit test runner;
+- secret scanner;
+- dependency audit gate;
+- Playwright;
+- live provider smoke;
+- failure-injection matrix for every workflow node;
+- performance/load tests.
 
-# 14. Regression Set
+These are explicit future quality improvements rather than silently assumed V0.1 coverage.
 
-从真实使用中逐步积累 technical comparison、GitHub research、current-info、conflicting sources、tool failure、structured output failure。
+# 11. Final Principle
 
-# 15. Real Provider Smoke Tests
-
-不在每次 CI 默认运行；手动/定时执行小额真实调用并使用 GitHub Actions Secrets。
-
-# 16. Frontend Integration
-
-验证 create research request、receive mocked SSE、timeline updates、final output render、error state。
-
-# 17. E2E MVP Flow
-
-open app → choose model → submit research → receive progress → view report → save knowledge → inspect run。
-
-# 18. CI Gates
-
-逐步启用 backend lint/type/tests、frontend lint/typecheck/tests/build、secret scan、dependency checks。
-
-# 19. Determinism
-
-普通测试不得依赖真实 LLM 输出。使用 MockProvider、MockTool 和固定时钟。
-
-# 20. Flaky Test Rule
-
-非确定性 Benchmark 与 deterministic CI 分离，不接受“AI 天然 flaky”作为普通 CI 不稳定理由。
-
-# 21. Coverage
-
-V0.1 不追求虚假高覆盖率，优先覆盖 contracts、state transitions、security boundaries、adapters 和 evaluation。
-
-# 22. Test Data
-
-测试数据不得包含真实 Secret 或敏感个人信息。
-
-# 23. CI Failure Artifacts
-
-保留 failing test、concise logs、test report；Future E2E 增加 screenshots/traces。
-
-# 24. MVP Acceptance Criteria
-
-1. Backend tests 可单命令运行；2. Frontend checks 可单命令运行；3. MockProvider 使 CI 不依赖真实 LLM；4. Event/API contracts 有测试；5. DB migration 可测试；6. Research workflow 有成功/失败 case；7. Secret 不进入 fixture/log；8. main push 自动 CI；9. Real-provider smoke 与普通 CI 分离；10. 测试失败阻止错误版本被视为可交付。
-
-# 25. Final Principle
-
-> **Make deterministic engineering deterministic; isolate AI nondeterminism instead of letting it infect the test suite.**
+> Make deterministic engineering deterministic; isolate AI nondeterminism instead of letting it infect the test suite.

@@ -1,93 +1,156 @@
 # Personal AI Engineering Workspace — Deployment Specification
 
 **Version:** 0.1  
-**Status:** Draft  
+**Status:** Local/CI baseline implemented  
 **Last Updated:** 2026-09-29
 
-# 1. Purpose
+# 1. V0.1 Topology
 
-定义本地开发、Docker Compose、环境配置、数据库迁移、CI/CD 和未来远程部署策略。
+```text
+Browser
+  ↓
+Next.js
+  ↓
+FastAPI
+  ├── PostgreSQL
+  ├── optional model providers
+  ├── optional Brave Search
+  └── optional GitHub API
+```
 
-# 2. MVP Topology
+Redis is included in Docker Compose for the future runtime/cache/worker path. Long-lived V0.1 business facts are stored in PostgreSQL.
 
-Browser → Next.js → FastAPI → PostgreSQL / Redis；FastAPI 再访问 LLM Providers、Search、GitHub。
+# 2. Local Infrastructure
 
-# 3. Local Development
+From repository root:
 
-允许 frontend 和 backend 独立开发启动；PostgreSQL/Redis 优先由 Docker Compose 提供。
+```bash
+docker compose up -d postgres redis
+```
 
-# 4. Containers
+Services:
+- PostgreSQL 17;
+- Redis 7.
 
-V0.1 目标服务：frontend、backend、postgres、redis。每个服务使用独立 Dockerfile 或官方镜像。
+PostgreSQL data uses the `postgres_data` Docker volume.
 
-# 5. Environment Configuration
+# 3. Backend Environment
 
-通过环境变量配置 APP_ENV、DATABASE_URL、REDIS_URL、FRONTEND_ORIGIN、Provider API Keys。真实 Secret 仅存在本地 .env 或部署平台 Secret Store。
+Backend settings load from `backend/.env` when the application is started from `backend/`.
 
-# 6. Database Migration
+Copy:
 
-使用 Alembic。部署顺序：backup/verify → migration → application rollout → health verification。禁止手工漂移 Schema。
+```bash
+cp .env.example backend/.env
+```
+
+Production/remote secrets must use a deployment secret store rather than files baked into images.
+
+# 4. Database Migration
+
+V0.1 uses Alembic.
+
+Development:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+Current migrations include:
+- core schema;
+- built-in Mock Model / Research Agent seed;
+- Knowledge↔Technology relation.
+
+No manual schema drift should be introduced outside migrations.
+
+# 5. Backend Start
+
+```bash
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Development may add `--reload`.
+
+# 6. Frontend Start
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Default frontend expects:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
 
 # 7. Health
 
-/health 检测进程；/ready 检测数据库/Redis。容器 healthcheck 依赖这些端点。
+- `/health` — process liveness;
+- `/ready` — dependency readiness.
 
-# 8. Redis
+# 8. CI
 
-V0.1 用于短期 runtime/event communication 与缓存方向。Redis 数据不作为长期业务事实来源。
+Every push/PR to main runs:
+- backend install;
+- Ruff;
+- Pytest;
+- Alembic migration;
+- API end-to-end smoke;
+- frontend typecheck;
+- frontend production build.
 
-# 9. Persistent Storage
+The API smoke starts Uvicorn against migrated PostgreSQL and exercises the core product loop.
 
-PostgreSQL 使用持久 volume。开发环境可重建，正式数据环境必须备份。
+# 9. External Provider Configuration
 
-# 10. Networking
+V0.1 can operate fully with mocks.
 
-PostgreSQL、Redis 默认仅内部网络可访问；仅 frontend/backend 必要端口映射到宿主机。
+Optional live integrations:
+- OpenAI-compatible model providers;
+- Brave Search;
+- GitHub API token.
 
-# 11. CI/CD
+External credentials are intentionally not required by ordinary CI.
 
-main push / PR 运行 lint、typecheck、tests、build。真实 Provider smoke tests 手动或定时执行。通过后才视为可部署版本。
+# 10. Security Boundaries
 
-# 12. Build Artifacts
+- Provider/API secrets are backend-only.
+- `.env` is not committed.
+- URL Fetch performs SSRF checks.
+- PostgreSQL should not be internet-exposed in remote deployment.
+- Remote deployment must use TLS.
+- V0.1 has no authentication and therefore should be treated as local/single-user unless protected externally.
 
-Frontend 生成生产 build；Backend 使用固定依赖安装。镜像应可重复构建并记录 Git commit SHA。
+# 11. Background Execution
 
-# 13. Version Metadata
+V0.1 Research uses FastAPI in-process background tasks.
 
-服务启动时可暴露非敏感 build metadata：app version、git SHA、build timestamp。
+The Run/Event contract is intentionally independent of this choice so a future queue/worker implementation can preserve API semantics.
 
-# 14. Rollback
+# 12. Remote Deployment Preconditions
 
-应用代码回滚与数据库回滚分开设计。破坏性 migration 必须采用 expand/migrate/contract 思路，不假定简单 downgrade 永远安全。
+Before a production-like remote deployment, add:
+- authentication / authorization;
+- TLS termination;
+- secret store;
+- database backup/restore verification;
+- rate limiting;
+- monitoring;
+- retention policy;
+- worker/queue strategy for long-running Runs;
+- explicit allowed origins;
+- deployment rollback procedure.
 
-# 15. Backups
+# 13. Rollback
 
-远程部署前必须有 PostgreSQL backup + restore 验证。仅“有备份文件”不等于恢复能力。
+Application rollback and database rollback are separate concerns.
 
-# 16. Secrets
+Future destructive migrations should follow expand → migrate → contract rather than assuming every downgrade is safe.
 
-生产 Secret 使用部署平台 secret mechanism，不 bake 进镜像、不写 Git、不打印日志。
+# 14. Final Principle
 
-# 17. Environments
-
-建议：local、test、future staging、future production。不同环境使用独立数据库和 Secret。
-
-# 18. Resource Limits
-
-Future 为 backend、worker、database 设置 CPU/memory limits。Agent Run 还需 token/cost/step budget。
-
-# 19. Background Workers
-
-V0.1 可先使用应用内 background execution；当长任务和并发增长后迁移至 queue + worker，不改变 Run API 契约。
-
-# 20. Remote Deployment
-
-远程部署前补齐 authentication、TLS、CORS、secret store、backup、monitoring、retention 和 rate limiting。
-
-# 21. MVP Acceptance Criteria
-
-1. Docker Compose 可启动核心依赖；2. Backend 可连 PostgreSQL/Redis；3. Alembic 可从空库升级；4. /health /ready 可用于 healthcheck；5. Secret 不进镜像和 Git；6. CI 可阻止明显错误；7. 代码版本可追踪到 commit；8. 数据 volume 独立；9. remote deployment 前置安全项明确；10. 架构允许未来 worker 化。
-
-# 22. Final Principle
-
-> **Deployment should reproduce the same contracts across environments while keeping secrets, data and runtime state explicitly separated.**
+> Deployment should reproduce the same product contracts across environments while keeping secrets, data and runtime state explicitly separated.
