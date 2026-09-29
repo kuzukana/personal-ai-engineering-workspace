@@ -6,23 +6,15 @@ from typing import Any
 
 import httpx
 
+from app.ai import schemas
 from app.ai.providers.base import ProviderAdapter
-from app.ai.schemas import (
-    FinishReason,
-    ModelCapabilities,
-    ModelEvent,
-    ModelRequest,
-    ModelResponse,
-    ModelUsage,
-    ToolCall,
-)
 
 
 _FINISH_REASON_MAP = {
-    "stop": FinishReason.STOP,
-    "length": FinishReason.LENGTH,
-    "tool_calls": FinishReason.TOOL_CALL,
-    "content_filter": FinishReason.CONTENT_FILTER,
+    "stop": schemas.FinishReason.STOP,
+    "length": schemas.FinishReason.LENGTH,
+    "tool_calls": schemas.FinishReason.TOOL_CALL,
+    "content_filter": schemas.FinishReason.CONTENT_FILTER,
 }
 
 
@@ -33,7 +25,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
         name: str,
         api_key: str,
         base_url: str,
-        capabilities: ModelCapabilities,
+        capabilities: schemas.ModelCapabilities,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.name = name
@@ -43,7 +35,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(timeout=60.0)
 
-    def capabilities(self, model_id: str) -> ModelCapabilities:
+    def capabilities(self, model_id: str) -> schemas.ModelCapabilities:
         return self._capabilities
 
     def _headers(self) -> dict[str, str]:
@@ -52,7 +44,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
             "Content-Type": "application/json",
         }
 
-    def _messages(self, request: ModelRequest) -> list[dict[str, str]]:
+    def _messages(self, request: schemas.ModelRequest) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
         if request.system_prompt:
             messages.append({"role": "system", "content": request.system_prompt})
@@ -66,7 +58,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
         )
         return messages
 
-    def _payload(self, request: ModelRequest, *, stream: bool) -> dict[str, Any]:
+    def _payload(self, request: schemas.ModelRequest, *, stream: bool) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": request.model_id,
             "messages": self._messages(request),
@@ -101,17 +93,17 @@ class OpenAICompatibleProvider(ProviderAdapter):
         return payload
 
     @staticmethod
-    def _normalize_finish_reason(value: str | None) -> FinishReason:
+    def _normalize_finish_reason(value: str | None) -> schemas.FinishReason:
         if value is None:
-            return FinishReason.UNKNOWN
-        return _FINISH_REASON_MAP.get(value, FinishReason.UNKNOWN)
+            return schemas.FinishReason.UNKNOWN
+        return _FINISH_REASON_MAP.get(value, schemas.FinishReason.UNKNOWN)
 
     @staticmethod
-    def _usage(payload: dict[str, Any] | None) -> ModelUsage:
+    def _usage(payload: dict[str, Any] | None) -> schemas.ModelUsage:
         payload = payload or {}
         input_tokens = payload.get("prompt_tokens")
         output_tokens = payload.get("completion_tokens")
-        return ModelUsage(
+        return schemas.ModelUsage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=payload.get("total_tokens"),
@@ -124,8 +116,8 @@ class OpenAICompatibleProvider(ProviderAdapter):
         )
 
     @staticmethod
-    def _tool_calls(message: dict[str, Any]) -> list[ToolCall]:
-        calls: list[ToolCall] = []
+    def _tool_calls(message: dict[str, Any]) -> list[schemas.ToolCall]:
+        calls: list[schemas.ToolCall] = []
         for item in message.get("tool_calls") or []:
             function = item.get("function") or {}
             raw_arguments = function.get("arguments") or "{}"
@@ -134,7 +126,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
             except json.JSONDecodeError:
                 arguments = {"_raw": raw_arguments}
             calls.append(
-                ToolCall(
+                schemas.ToolCall(
                     id=str(item.get("id", "")),
                     name=str(function.get("name", "")),
                     arguments=arguments,
@@ -142,7 +134,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
             )
         return calls
 
-    async def generate(self, request: ModelRequest) -> ModelResponse:
+    async def generate(self, request: schemas.ModelRequest) -> schemas.ModelResponse:
         response = await self._client.post(
             f"{self._base_url}/chat/completions",
             headers=self._headers(),
@@ -159,7 +151,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
                 structured_output = json.loads(content)
             except json.JSONDecodeError:
                 structured_output = None
-        return ModelResponse(
+        return schemas.ModelResponse(
             request_id=request.request_id,
             model_id=request.model_id,
             provider=self.name,
@@ -171,8 +163,8 @@ class OpenAICompatibleProvider(ProviderAdapter):
             provider_metadata={"id": body.get("id")},
         )
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        yield ModelEvent(
+    async def stream(self, request: schemas.ModelRequest) -> AsyncIterator[schemas.ModelEvent]:
+        yield schemas.ModelEvent(
             type="model.started",
             payload={"model_id": request.model_id, "provider": self.name},
         )
@@ -191,19 +183,19 @@ class OpenAICompatibleProvider(ProviderAdapter):
                     continue
                 body = json.loads(data)
                 if body.get("usage"):
-                    yield ModelEvent(
+                    yield schemas.ModelEvent(
                         type="model.usage",
                         payload=self._usage(body["usage"]).model_dump(),
                     )
                 for choice in body.get("choices") or []:
                     delta = choice.get("delta") or {}
                     if delta.get("content"):
-                        yield ModelEvent(
+                        yield schemas.ModelEvent(
                             type="model.text.delta",
                             payload={"delta": delta["content"]},
                         )
                     if choice.get("finish_reason"):
-                        yield ModelEvent(
+                        yield schemas.ModelEvent(
                             type="model.completed",
                             payload={
                                 "finish_reason": self._normalize_finish_reason(
