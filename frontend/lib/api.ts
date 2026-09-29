@@ -36,11 +36,21 @@ export type RunEvent = {
 export type RunDetail = {
   id: string;
   status: string;
+  task_type: string | null;
+  model_id: string;
   input_text: string;
   output_text: string | null;
   structured_output: Record<string, unknown> | null;
   latency_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  estimated_cost: number | null;
+  currency: string | null;
   error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
 };
 
 export type ResearchSource = {
@@ -159,6 +169,11 @@ export async function createResearch(
   return response.data;
 }
 
+export async function listRuns(): Promise<RunDetail[]> {
+  const response = await jsonRequest<{ data: RunDetail[] }>("/api/v1/runs");
+  return response.data;
+}
+
 export async function getRun(runId: string): Promise<RunDetail> {
   const response = await jsonRequest<{ data: RunDetail }>(`/api/v1/runs/${runId}`);
   return response.data;
@@ -167,6 +182,13 @@ export async function getRun(runId: string): Promise<RunDetail> {
 export async function getResearchByRun(runId: string): Promise<ResearchItem> {
   const response = await jsonRequest<{ data: ResearchItem }>(
     `/api/v1/research/${runId}`,
+  );
+  return response.data;
+}
+
+export async function getEventHistory(runId: string): Promise<RunEvent[]> {
+  const response = await jsonRequest<{ data: RunEvent[] }>(
+    `/api/v1/runs/${runId}/events/history`,
   );
   return response.data;
 }

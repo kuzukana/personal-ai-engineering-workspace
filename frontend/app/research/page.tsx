@@ -170,11 +170,21 @@ export default function ResearchPage() {
       setRun({
         id: created.run_id,
         status: created.status,
+        task_type: "research",
+        model_id: selectedModelId,
         input_text: query.trim(),
         output_text: null,
         structured_output: null,
         latency_ms: null,
+        input_tokens: null,
+        output_tokens: null,
+        estimated_cost: null,
+        currency: null,
         error_code: null,
+        error_message: null,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
       });
       connectEvents(created.run_id, created.events_url);
     } catch (reason: unknown) {

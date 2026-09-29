@@ -22,8 +22,8 @@ const sections = [
   {
     title: "Agent Lab",
     description: "Inspect runs, models, tools, events, latency and evaluation.",
-    href: null,
-    status: "Planned",
+    href: "/lab",
+    status: "Available",
   },
 ];
 
