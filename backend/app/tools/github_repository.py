@@ -8,7 +8,6 @@ import httpx
 
 from app.tools.gateway import Tool
 
-
 _REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
