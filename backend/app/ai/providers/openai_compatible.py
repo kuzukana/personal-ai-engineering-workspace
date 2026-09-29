@@ -9,7 +9,6 @@ import httpx
 import app.ai.providers.base as provider_base
 import app.ai.schemas as ai_schemas
 
-
 _FINISH_REASON_MAP = {
     "stop": ai_schemas.FinishReason.STOP,
     "length": ai_schemas.FinishReason.LENGTH,
