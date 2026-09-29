@@ -15,6 +15,7 @@ import {
   getResearchByRun,
   getRun,
   listModels,
+  saveResearchToKnowledge,
 } from "../../lib/api";
 
 const TERMINAL_EVENTS = ["run.completed", "run.failed", "run.cancelled"];
@@ -71,6 +72,8 @@ export default function ResearchPage() {
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savingKnowledge, setSavingKnowledge] = useState(false);
+  const [knowledgeMessage, setKnowledgeMessage] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -159,6 +162,7 @@ export default function ResearchPage() {
     setResearch(null);
     setEvaluations([]);
     setEvents([]);
+    setKnowledgeMessage(null);
 
     try {
       const created = await createResearch(query.trim(), selectedModelId);
@@ -177,6 +181,20 @@ export default function ResearchPage() {
       setError(reason instanceof Error ? reason.message : "Failed to start research.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleSaveKnowledge() {
+    if (!runId) return;
+    setSavingKnowledge(true);
+    setKnowledgeMessage(null);
+    try {
+      const item = await saveResearchToKnowledge(runId);
+      setKnowledgeMessage(`Saved to Knowledge: ${item.title}`);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Failed to save Knowledge.");
+    } finally {
+      setSavingKnowledge(false);
     }
   }
 
@@ -286,8 +304,21 @@ export default function ResearchPage() {
         <section className="panel result-panel">
           <div className="panel-heading">
             <h2>{research?.title ?? "Run result"}</h2>
-            {run?.latency_ms != null && <span>{run.latency_ms} ms</span>}
+            <div className="result-actions">
+              {research && (
+                <button
+                  className="secondary-button"
+                  disabled={savingKnowledge}
+                  onClick={() => void handleSaveKnowledge()}
+                  type="button"
+                >
+                  {savingKnowledge ? "Saving…" : "Save to Knowledge"}
+                </button>
+              )}
+              {run?.latency_ms != null && <span>{run.latency_ms} ms</span>}
+            </div>
           </div>
+          {knowledgeMessage && <div className="success-box">{knowledgeMessage}</div>}
 
           {run?.status === "FAILED" && (
             <div className="error-box">

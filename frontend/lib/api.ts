@@ -77,6 +77,19 @@ export type EvaluationResult = {
   evidence: Record<string, unknown> | null;
 };
 
+export type KnowledgeItem = {
+  id: string;
+  knowledge_type: string;
+  title: string;
+  summary: string | null;
+  content_markdown: string | null;
+  source_research_id: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -132,6 +145,31 @@ export async function getResearchByRun(runId: string): Promise<ResearchItem> {
 export async function getEvaluations(runId: string): Promise<EvaluationResult[]> {
   const response = await jsonRequest<{ data: EvaluationResult[] }>(
     `/api/v1/runs/${runId}/evaluations`,
+  );
+  return response.data;
+}
+
+export async function saveResearchToKnowledge(runId: string): Promise<KnowledgeItem> {
+  const response = await jsonRequest<{ data: KnowledgeItem }>(
+    `/api/v1/knowledge/from-research/${runId}`,
+    { method: "POST" },
+  );
+  return response.data;
+}
+
+export async function listKnowledge(query?: string): Promise<KnowledgeItem[]> {
+  const suffix = query?.trim()
+    ? `?q=${encodeURIComponent(query.trim())}`
+    : "";
+  const response = await jsonRequest<{ data: KnowledgeItem[] }>(
+    `/api/v1/knowledge${suffix}`,
+  );
+  return response.data;
+}
+
+export async function getKnowledge(id: string): Promise<KnowledgeItem> {
+  const response = await jsonRequest<{ data: KnowledgeItem }>(
+    `/api/v1/knowledge/${id}`,
   );
   return response.data;
 }

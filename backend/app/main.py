@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.health import router as health_router
+from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.models import router as models_router
 from app.api.routes.research import router as research_router
 from app.api.routes.runs import router as runs_router
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(knowledge_router)
 app.include_router(models_router)
 app.include_router(research_router)
 app.include_router(runs_router)

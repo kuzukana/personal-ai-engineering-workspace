@@ -10,8 +10,8 @@ const sections = [
   {
     title: "Knowledge",
     description: "Turn useful research into reusable engineering knowledge.",
-    href: null,
-    status: "Next",
+    href: "/knowledge",
+    status: "Available",
   },
   {
     title: "Capabilities",
