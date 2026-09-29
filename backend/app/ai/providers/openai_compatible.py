@@ -6,8 +6,8 @@ from typing import Any
 
 import httpx
 
-from app.ai import schemas
 from app.ai.providers.base import ProviderAdapter
+from app.ai import schemas
 
 
 _FINISH_REASON_MAP = {
