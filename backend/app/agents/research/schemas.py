@@ -6,6 +6,7 @@ class ResearchSourceData(BaseModel):
     title: str
     snippet: str | None = None
     source_type: str = "OTHER"
+    verification_status: str = "UNVERIFIED"
 
 
 class ResearchReport(BaseModel):

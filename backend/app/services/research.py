@@ -10,6 +10,7 @@ from app.db.session import SessionLocal
 from app.domain.constants import RESEARCH_AGENT_VERSION_ID
 from app.evaluation.research import evaluate_research
 from app.events.publisher import event_publisher
+from app.runtime.run_control import RunCancelled, run_control
 from app.services.model_registry import ensure_registered_model
 
 
@@ -66,12 +67,14 @@ class ResearchService:
                     {"agent_id": "research-agent", "agent_version": "0.1"},
                 )
 
+                run_control.raise_if_cancelled(run_id)
                 report = await research_agent.run(
                     session,
                     run_id,
                     query,
                     str(model_id),
                 )
+                run_control.raise_if_cancelled(run_id)
 
                 item = ResearchItem(
                     run_id=run_id,
@@ -93,7 +96,7 @@ class ResearchService:
                             title=source.title,
                             source_type=source.source_type,
                             content_excerpt=source.snippet,
-                            verification_status="VERIFIED",
+                            verification_status=source.verification_status,
                         )
                     )
 
@@ -157,6 +160,20 @@ class ResearchService:
                     "agent_runtime",
                     {"latency_ms": run.latency_ms, "warnings": []},
                 )
+            except RunCancelled:
+                await session.rollback()
+                run = await session.get(Run, run_id)
+                if run is not None:
+                    run.status = "CANCELLED"
+                    run.completed_at = datetime.now(UTC)
+                    await session.commit()
+                    await event_publisher.emit(
+                        session,
+                        run_id,
+                        "run.cancelled",
+                        "agent_runtime",
+                        {"reason": "user_cancelled"},
+                    )
             except Exception:
                 await session.rollback()
                 run = await session.get(Run, run_id)
@@ -178,6 +195,8 @@ class ResearchService:
                         },
                     )
                 raise
+            finally:
+                run_control.clear(run_id)
 
     async def get_run(self, run_id: UUID) -> Run | None:
         async with SessionLocal() as session:

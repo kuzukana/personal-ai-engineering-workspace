@@ -2,16 +2,53 @@ import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.db.models import EvaluationResult, Run, RunEvent
 from app.db.session import SessionLocal
 from app.events.broker import event_broker
+from app.runtime.run_control import run_control
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
+TERMINAL_STATUSES = {"COMPLETED", "FAILED", "CANCELLED"}
+
+
+def serialize_run(run: Run) -> dict:
+    return {
+        "id": str(run.id),
+        "status": run.status,
+        "task_type": run.task_type,
+        "model_id": str(run.model_id),
+        "input_text": run.input_text,
+        "output_text": run.output_text,
+        "structured_output": run.structured_output_json,
+        "latency_ms": run.latency_ms,
+        "input_tokens": run.input_tokens,
+        "output_tokens": run.output_tokens,
+        "estimated_cost": float(run.estimated_cost) if run.estimated_cost is not None else None,
+        "error_code": run.error_code,
+        "created_at": run.created_at.isoformat(),
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
+
+
+@router.get("")
+async def list_runs(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status: str | None = None,
+) -> dict:
+    async with SessionLocal() as session:
+        query = select(Run).order_by(Run.created_at.desc()).offset(offset).limit(limit)
+        if status:
+            query = query.where(Run.status == status.upper())
+        result = await session.execute(query)
+        rows = result.scalars().all()
+        return {"data": [serialize_run(row) for row in rows]}
 
 
 @router.get("/{run_id}")
@@ -20,17 +57,24 @@ async def get_run(run_id: UUID) -> dict:
         run = await session.get(Run, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
-        return {
-            "data": {
-                "id": str(run.id),
-                "status": run.status,
-                "input_text": run.input_text,
-                "output_text": run.output_text,
-                "structured_output": run.structured_output_json,
-                "latency_ms": run.latency_ms,
-                "error_code": run.error_code,
-            }
+        return {"data": serialize_run(run)}
+
+
+@router.post("/{run_id}/cancel", status_code=202)
+async def cancel_run(run_id: UUID) -> dict:
+    async with SessionLocal() as session:
+        run = await session.get(Run, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if run.status in TERMINAL_STATUSES:
+            raise HTTPException(status_code=409, detail=f"Run is already {run.status.lower()}")
+    run_control.request_cancel(run_id)
+    return {
+        "data": {
+            "run_id": str(run_id),
+            "status": "CANCELLATION_REQUESTED",
         }
+    }
 
 
 @router.get("/{run_id}/events/history")

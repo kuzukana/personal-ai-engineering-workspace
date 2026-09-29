@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+from urllib.parse import urlparse
 
 
 class Tool(ABC):
@@ -30,6 +31,21 @@ class MockWebSearchTool(Tool):
         }
 
 
+class MockFetchUrlTool(Tool):
+    name = "fetch_url"
+
+    async def execute(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        url = str(arguments.get("url", ""))
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("fetch_url requires an absolute http(s) URL")
+        return {
+            "url": url,
+            "title": str(arguments.get("title") or "Mock fetched source"),
+            "content": f"Mock fetched content from {url}",
+        }
+
+
 class ToolGateway:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -47,3 +63,4 @@ class ToolGateway:
 
 tool_gateway = ToolGateway()
 tool_gateway.register(MockWebSearchTool())
+tool_gateway.register(MockFetchUrlTool())

@@ -10,6 +10,7 @@ from app.agents.research.schemas import ResearchReport, ResearchSourceData
 from app.ai.container import model_gateway
 from app.ai.schemas import ChatMessage, ModelRequest
 from app.events.publisher import event_publisher
+from app.runtime.run_control import run_control
 from app.tools.gateway import tool_gateway
 
 
@@ -18,6 +19,8 @@ class ResearchState(TypedDict, total=False):
     research_goal: str
     search_queries: list[str]
     sources: list[dict]
+    selected_sources: list[dict]
+    findings: list[dict]
     verification_results: list[dict]
     report: dict
 
@@ -31,6 +34,7 @@ class ResearchAgent:
         model_id: str,
     ) -> ResearchReport:
         async def step_started(key: str, index: int) -> None:
+            run_control.raise_if_cancelled(run_id)
             await event_publisher.emit(
                 session,
                 run_id,
@@ -47,6 +51,7 @@ class ResearchAgent:
                 "agent_runtime",
                 {"step_key": key, "step_index": index},
             )
+            run_control.raise_if_cancelled(run_id)
 
         async def understand(state: ResearchState) -> dict:
             await step_started("understand", 1)
@@ -92,22 +97,106 @@ class ResearchAgent:
             await step_completed("search", 3)
             return {"sources": result["results"]}
 
+        async def select_sources(state: ResearchState) -> dict:
+            await step_started("select_sources", 4)
+            selected = [
+                source
+                for source in state["sources"]
+                if source.get("url") and source.get("title")
+            ][:5]
+            await step_completed("select_sources", 4)
+            return {"selected_sources": selected}
+
+        async def read_sources(state: ResearchState) -> dict:
+            await step_started("read_sources", 5)
+            enriched: list[dict] = []
+            for source in state["selected_sources"]:
+                run_control.raise_if_cancelled(run_id)
+                tool_call_id = str(uuid4())
+                await event_publisher.emit(
+                    session,
+                    run_id,
+                    "tool.started",
+                    "tool_gateway",
+                    {
+                        "tool_call_id": tool_call_id,
+                        "tool_name": "fetch_url",
+                        "risk_level": "LOW",
+                    },
+                )
+                fetched = await tool_gateway.execute(
+                    "fetch_url",
+                    {
+                        "url": source["url"],
+                        "title": source["title"],
+                    },
+                )
+                await event_publisher.emit(
+                    session,
+                    run_id,
+                    "tool.completed",
+                    "tool_gateway",
+                    {
+                        "tool_call_id": tool_call_id,
+                        "tool_name": "fetch_url",
+                        "result_summary": {"url": source["url"]},
+                    },
+                )
+                enriched.append(
+                    {
+                        **source,
+                        "content": fetched.get("content"),
+                    }
+                )
+            await step_completed("read_sources", 5)
+            return {"selected_sources": enriched}
+
+        async def extract_findings(state: ResearchState) -> dict:
+            await step_started("extract_findings", 6)
+            findings = []
+            for source in state["selected_sources"]:
+                evidence = str(source.get("content") or source.get("snippet") or "").strip()
+                if not evidence:
+                    continue
+                findings.append(
+                    {
+                        "claim": evidence,
+                        "evidence": evidence,
+                        "source_url": source["url"],
+                    }
+                )
+            await step_completed("extract_findings", 6)
+            return {"findings": findings}
+
         async def verify(state: ResearchState) -> dict:
-            await step_started("verify", 4)
+            await step_started("verify", 7)
             results = [
                 {
-                    "claim": source["snippet"],
-                    "status": "VERIFIED",
-                    "source_url": source["url"],
+                    **finding,
+                    "status": (
+                        "PARTIALLY_VERIFIED"
+                        if finding.get("evidence") and finding.get("source_url")
+                        else "UNVERIFIED"
+                    ),
                 }
-                for source in state["sources"]
+                for finding in state["findings"]
             ]
-            await step_completed("verify", 4)
+            await step_completed("verify", 7)
             return {"verification_results": results}
 
         async def synthesize(state: ResearchState) -> dict:
-            await step_started("synthesize", 5)
+            await step_started("synthesize", 8)
             model_call_id = str(uuid4())
+            evidence_lines = [
+                f"- [{item['status']}] {item['claim']} (source: {item['source_url']})"
+                for item in state["verification_results"]
+            ]
+            prompt = (
+                "Write a concise research summary grounded only in the evidence below. "
+                "If the evidence is limited, say so explicitly.\n\n"
+                f"Task: {state['query']}\n\nEvidence:\n"
+                + "\n".join(evidence_lines)
+            )
             await event_publisher.emit(
                 session,
                 run_id,
@@ -118,12 +207,7 @@ class ResearchAgent:
             response = await model_gateway.generate(
                 ModelRequest(
                     model_id=model_id,
-                    messages=[
-                        ChatMessage(
-                            role="user",
-                            content=f"Summarize the research task: {state['query']}",
-                        )
-                    ],
+                    messages=[ChatMessage(role="user", content=prompt)],
                 )
             )
             await event_publisher.emit(
@@ -143,7 +227,21 @@ class ResearchAgent:
                     "finish_reason": response.finish_reason.value,
                 },
             )
-            sources = [ResearchSourceData(**source) for source in state["sources"]]
+
+            verification_by_url = {
+                item["source_url"]: item["status"]
+                for item in state["verification_results"]
+            }
+            sources = [
+                ResearchSourceData(
+                    **source,
+                    verification_status=verification_by_url.get(
+                        source["url"],
+                        "UNVERIFIED",
+                    ),
+                )
+                for source in state["selected_sources"]
+            ]
             report = ResearchReport(
                 title=f"Research: {state['query']}",
                 summary=response.content,
@@ -153,22 +251,28 @@ class ResearchAgent:
                 sources=sources,
                 open_questions=[],
                 next_actions=[
-                    "Review the sources and save useful findings to Knowledge."
+                    "Review the cited evidence before promoting findings to long-term Knowledge."
                 ],
             )
-            await step_completed("synthesize", 5)
+            await step_completed("synthesize", 8)
             return {"report": report.model_dump(mode="json")}
 
         graph = StateGraph(ResearchState)
         graph.add_node("understand", understand)
         graph.add_node("plan_search", plan_search)
         graph.add_node("search", search)
+        graph.add_node("select_sources", select_sources)
+        graph.add_node("read_sources", read_sources)
+        graph.add_node("extract_findings", extract_findings)
         graph.add_node("verify", verify)
         graph.add_node("synthesize", synthesize)
         graph.add_edge(START, "understand")
         graph.add_edge("understand", "plan_search")
         graph.add_edge("plan_search", "search")
-        graph.add_edge("search", "verify")
+        graph.add_edge("search", "select_sources")
+        graph.add_edge("select_sources", "read_sources")
+        graph.add_edge("read_sources", "extract_findings")
+        graph.add_edge("extract_findings", "verify")
         graph.add_edge("verify", "synthesize")
         graph.add_edge("synthesize", END)
 
