@@ -220,6 +220,19 @@ class Technology(Base):
     updated_at: Mapped[datetime] = now_col()
 
 
+class KnowledgeTechnology(Base):
+    __tablename__ = "knowledge_technologies"
+    knowledge_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_items.id"),
+        primary_key=True,
+    )
+    technology_id: Mapped[UUID] = mapped_column(
+        ForeignKey("technologies.id"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = now_col()
+
+
 class Capability(Base):
     __tablename__ = "capabilities"
     __table_args__ = (CheckConstraint("level >= 0 AND level <= 5", name="ck_capability_level"),)

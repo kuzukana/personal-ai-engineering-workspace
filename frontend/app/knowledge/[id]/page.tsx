@@ -36,6 +36,13 @@ export default function KnowledgeDetailPage() {
             <span className="mini-status">{item.knowledge_type}</span>
           </div>
           <p className="report-summary">{item.summary}</p>
+          {!!item.technologies.length && (
+            <div className="model-meta">
+              {item.technologies.map((technology) => (
+                <span key={technology.id}>{technology.name}</span>
+              ))}
+            </div>
+          )}
           <div className="knowledge-content">
             <pre>{item.content_markdown || "No content."}</pre>
           </div>

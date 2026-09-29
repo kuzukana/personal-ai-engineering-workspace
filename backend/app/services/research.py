@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
 
 from app.agents.research.agent import research_agent
 from app.ai.container import model_gateway
-from app.db.models import ResearchItem, ResearchSource, Run
+from app.db.models import ResearchItem, ResearchSource, Run, RunEvent
 from app.db.session import SessionLocal
 from app.domain.constants import RESEARCH_AGENT_VERSION_ID
 from app.evaluation.research import evaluate_research
@@ -146,11 +147,52 @@ class ResearchService:
                 if run is None:
                     return
 
+                usage_result = await session.execute(
+                    select(RunEvent).where(
+                        RunEvent.run_id == run_id,
+                        RunEvent.event_type == "model.usage",
+                    )
+                )
+                usage_events = usage_result.scalars().all()
+                input_tokens = 0
+                output_tokens = 0
+                reasoning_tokens = 0
+                estimated_cost = Decimal("0")
+                currency = None
+                has_input_tokens = False
+                has_output_tokens = False
+                has_reasoning_tokens = False
+                has_cost = False
+
+                for usage_event in usage_events:
+                    payload = usage_event.payload_json or {}
+                    if payload.get("input_tokens") is not None:
+                        input_tokens += int(payload["input_tokens"])
+                        has_input_tokens = True
+                    if payload.get("output_tokens") is not None:
+                        output_tokens += int(payload["output_tokens"])
+                        has_output_tokens = True
+                    if payload.get("reasoning_tokens") is not None:
+                        reasoning_tokens += int(payload["reasoning_tokens"])
+                        has_reasoning_tokens = True
+                    if payload.get("estimated_cost") is not None:
+                        estimated_cost += Decimal(str(payload["estimated_cost"]))
+                        has_cost = True
+                    if payload.get("currency"):
+                        currency = str(payload["currency"])
+
                 run.status = "COMPLETED"
                 run.output_text = report.summary
                 run.structured_output_json = report.model_dump(mode="json")
                 run.completed_at = finished
                 run.latency_ms = int((finished - started).total_seconds() * 1000)
+                run.input_tokens = input_tokens if has_input_tokens else None
+                run.output_tokens = output_tokens if has_output_tokens else None
+                run.reasoning_tokens = (
+                    reasoning_tokens if has_reasoning_tokens else None
+                )
+                run.estimated_cost = estimated_cost if has_cost else None
+                run.currency = currency
                 await session.commit()
 
                 await event_publisher.emit(

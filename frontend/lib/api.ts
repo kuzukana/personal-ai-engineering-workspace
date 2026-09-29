@@ -112,6 +112,12 @@ export type EvidenceItem = {
   description: string | null;
   url: string | null;
   metadata: Record<string, unknown>;
+  technologies: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    category: string | null;
+  }>;
   created_at: string;
   updated_at: string;
 };

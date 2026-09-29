@@ -2,8 +2,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import KnowledgeItem, ResearchItem
+from app.db.models import (
+    KnowledgeItem,
+    KnowledgeTechnology,
+    ResearchItem,
+    Technology,
+)
 from app.db.session import SessionLocal
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
@@ -44,7 +50,26 @@ def render_knowledge_markdown(research: ResearchItem) -> str:
     return "\n".join(lines).strip()
 
 
-def serialize_knowledge(item: KnowledgeItem) -> dict:
+async def get_linked_technologies(
+    session: AsyncSession,
+    knowledge_id: UUID,
+) -> list[Technology]:
+    result = await session.execute(
+        select(Technology)
+        .join(
+            KnowledgeTechnology,
+            KnowledgeTechnology.technology_id == Technology.id,
+        )
+        .where(KnowledgeTechnology.knowledge_id == knowledge_id)
+        .order_by(Technology.name)
+    )
+    return list(result.scalars().all())
+
+
+def serialize_knowledge(
+    item: KnowledgeItem,
+    technologies: list[Technology] | None = None,
+) -> dict:
     return {
         "id": str(item.id),
         "knowledge_type": item.knowledge_type,
@@ -56,6 +81,15 @@ def serialize_knowledge(item: KnowledgeItem) -> dict:
         ),
         "status": item.status,
         "metadata": item.metadata_json or {},
+        "technologies": [
+            {
+                "id": str(technology.id),
+                "name": technology.name,
+                "slug": technology.slug,
+                "category": technology.category,
+            }
+            for technology in technologies or []
+        ],
         "created_at": item.created_at.isoformat(),
         "updated_at": item.updated_at.isoformat(),
     }
@@ -78,16 +112,18 @@ async def save_research_to_knowledge(run_id: UUID) -> dict:
         )
         existing = existing_result.scalar_one_or_none()
         if existing is not None:
+            technologies = await get_linked_technologies(session, existing.id)
             return {
-                "data": serialize_knowledge(existing),
+                "data": serialize_knowledge(existing, technologies),
                 "meta": {"created": False},
             }
 
+        content_markdown = render_knowledge_markdown(research)
         item = KnowledgeItem(
             knowledge_type="RESEARCH",
             title=research.title,
             summary=research.summary,
-            content_markdown=render_knowledge_markdown(research),
+            content_markdown=content_markdown,
             source_research_id=research.id,
             status="ACTIVE",
             metadata_json={
@@ -96,11 +132,36 @@ async def save_research_to_knowledge(run_id: UUID) -> dict:
             },
         )
         session.add(item)
+        await session.flush()
+
+        technology_result = await session.execute(
+            select(Technology).order_by(Technology.name)
+        )
+        candidate_technologies = technology_result.scalars().all()
+        searchable = " ".join(
+            [
+                research.title or "",
+                research.summary or "",
+                content_markdown,
+            ]
+        ).lower()
+        linked: list[Technology] = []
+        for technology in candidate_technologies:
+            if technology.name.lower() not in searchable:
+                continue
+            session.add(
+                KnowledgeTechnology(
+                    knowledge_id=item.id,
+                    technology_id=technology.id,
+                )
+            )
+            linked.append(technology)
+
         await session.commit()
         await session.refresh(item)
 
         return {
-            "data": serialize_knowledge(item),
+            "data": serialize_knowledge(item, linked),
             "meta": {"created": True},
         }
 
@@ -131,7 +192,11 @@ async def list_knowledge(
 
         result = await session.execute(query)
         rows = result.scalars().all()
-        return {"data": [serialize_knowledge(row) for row in rows]}
+        data = []
+        for row in rows:
+            technologies = await get_linked_technologies(session, row.id)
+            data.append(serialize_knowledge(row, technologies))
+        return {"data": data}
 
 
 @router.get("/{knowledge_id}")
@@ -140,4 +205,42 @@ async def get_knowledge(knowledge_id: UUID) -> dict:
         item = await session.get(KnowledgeItem, knowledge_id)
         if item is None or item.status != "ACTIVE":
             raise HTTPException(status_code=404, detail="Knowledge item not found")
-        return {"data": serialize_knowledge(item)}
+        technologies = await get_linked_technologies(session, knowledge_id)
+        return {"data": serialize_knowledge(item, technologies)}
+
+
+@router.post("/{knowledge_id}/technologies/{technology_id}", status_code=201)
+async def link_knowledge_technology(
+    knowledge_id: UUID,
+    technology_id: UUID,
+) -> dict:
+    async with SessionLocal() as session:
+        knowledge = await session.get(KnowledgeItem, knowledge_id)
+        technology = await session.get(Technology, technology_id)
+        if knowledge is None:
+            raise HTTPException(status_code=404, detail="Knowledge item not found")
+        if technology is None:
+            raise HTTPException(status_code=404, detail="Technology not found")
+
+        existing = await session.get(
+            KnowledgeTechnology,
+            {
+                "knowledge_id": knowledge_id,
+                "technology_id": technology_id,
+            },
+        )
+        if existing is None:
+            session.add(
+                KnowledgeTechnology(
+                    knowledge_id=knowledge_id,
+                    technology_id=technology_id,
+                )
+            )
+            await session.commit()
+
+        return {
+            "data": {
+                "knowledge_id": str(knowledge_id),
+                "technology_id": str(technology_id),
+            }
+        }

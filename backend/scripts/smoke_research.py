@@ -39,6 +39,17 @@ def main() -> None:
             model["id"] == MOCK_MODEL_ID for model in models.json()["data"]
         )
 
+        technology = client.post(
+            f"{BASE_URL}/api/v1/capabilities/technologies",
+            json={
+                "name": "LangGraph",
+                "category": "Agent",
+                "description": "Smoke-test technology",
+            },
+        )
+        technology.raise_for_status()
+        technology_id = technology.json()["data"]["technology"]["id"]
+
         created = client.post(
             f"{BASE_URL}/api/v1/research",
             json={
@@ -51,6 +62,9 @@ def main() -> None:
 
         run = wait_for_run(client, run_id)
         assert run["status"] == "COMPLETED", run
+        assert run["input_tokens"] is not None
+        assert run["output_tokens"] is not None
+        assert run["estimated_cost"] is not None
 
         research = client.get(f"{BASE_URL}/api/v1/research/{run_id}")
         research.raise_for_status()
@@ -85,17 +99,17 @@ def main() -> None:
         knowledge_id = knowledge.json()["data"]["id"]
         detail = client.get(f"{BASE_URL}/api/v1/knowledge/{knowledge_id}")
         detail.raise_for_status()
+        linked_technologies = detail.json()["data"]["technologies"]
+        assert any(item["name"] == "LangGraph" for item in linked_technologies)
 
-        technology = client.post(
-            f"{BASE_URL}/api/v1/capabilities/technologies",
+        technology_update = client.patch(
+            f"{BASE_URL}/api/v1/capabilities/technologies/{technology_id}",
             json={
-                "name": "LangGraph",
-                "category": "Agent",
-                "description": "Smoke-test technology",
+                "category": "Agent Framework",
+                "description": "Updated by smoke test",
             },
         )
-        technology.raise_for_status()
-        technology_id = technology.json()["data"]["technology"]["id"]
+        technology_update.raise_for_status()
 
         capability = client.put(
             f"{BASE_URL}/api/v1/capabilities/technologies/{technology_id}",
@@ -121,10 +135,32 @@ def main() -> None:
         evidence.raise_for_status()
         evidence_id = evidence.json()["data"]["id"]
 
+        evidence_update = client.patch(
+            f"{BASE_URL}/api/v1/capabilities/evidences/{evidence_id}",
+            json={"description": "Updated end-to-end CI evidence"},
+        )
+        evidence_update.raise_for_status()
+
         linked = client.post(
             f"{BASE_URL}/api/v1/capabilities/{capability_id}/evidences/{evidence_id}"
         )
         linked.raise_for_status()
+
+        capability_evidence = client.get(
+            f"{BASE_URL}/api/v1/capabilities/{capability_id}/evidences"
+        )
+        capability_evidence.raise_for_status()
+        assert len(capability_evidence.json()["data"]) == 1
+
+        delete_evidence = client.delete(
+            f"{BASE_URL}/api/v1/capabilities/evidences/{evidence_id}"
+        )
+        delete_evidence.raise_for_status()
+
+        delete_technology = client.delete(
+            f"{BASE_URL}/api/v1/capabilities/technologies/{technology_id}"
+        )
+        delete_technology.raise_for_status()
 
         print(
             "smoke-ok",
@@ -132,7 +168,6 @@ def main() -> None:
                 "run_id": run_id,
                 "knowledge_id": knowledge_id,
                 "capability_id": capability_id,
-                "evidence_id": evidence_id,
             },
         )
 

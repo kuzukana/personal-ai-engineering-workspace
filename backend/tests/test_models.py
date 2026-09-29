@@ -15,6 +15,7 @@ def test_expected_tables_are_registered() -> None:
         "research_items",
         "research_sources",
         "knowledge_items",
+        "knowledge_technologies",
         "technologies",
         "capabilities",
         "evidences",
