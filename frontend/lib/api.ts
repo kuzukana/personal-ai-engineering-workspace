@@ -131,6 +131,12 @@ export type KnowledgeItem = {
   source_research_id: string | null;
   status: string;
   metadata: Record<string, unknown>;
+  technologies: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    category: string | null;
+  }>;
   created_at: string;
   updated_at: string;
 };
