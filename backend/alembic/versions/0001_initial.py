@@ -5,8 +5,9 @@ Revises:
 Create Date: 2026-09-29
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0001_initial"
 down_revision = None
@@ -78,7 +79,12 @@ def upgrade() -> None:
     op.create_table(
         "runs",
         sa.Column("id", sa.Uuid(), primary_key=True),
-        sa.Column("agent_version_id", sa.Uuid(), sa.ForeignKey("agent_versions.id"), nullable=False),
+        sa.Column(
+            "agent_version_id",
+            sa.Uuid(),
+            sa.ForeignKey("agent_versions.id"),
+            nullable=False,
+        ),
         sa.Column("model_id", sa.Uuid(), sa.ForeignKey("models.id"), nullable=False),
         sa.Column("status", sa.String(40), nullable=False),
         sa.Column("task_type", sa.String(80)),
@@ -162,7 +168,12 @@ def upgrade() -> None:
     op.create_table(
         "research_sources",
         sa.Column("id", sa.Uuid(), primary_key=True),
-        sa.Column("research_item_id", sa.Uuid(), sa.ForeignKey("research_items.id"), nullable=False),
+        sa.Column(
+            "research_item_id",
+            sa.Uuid(),
+            sa.ForeignKey("research_items.id"),
+            nullable=False,
+        ),
         sa.Column("url", sa.Text(), nullable=False),
         sa.Column("title", sa.Text()),
         sa.Column("domain", sa.String(255)),
@@ -174,7 +185,11 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.JSON()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_research_sources_research_item_id", "research_sources", ["research_item_id"])
+    op.create_index(
+        "ix_research_sources_research_item_id",
+        "research_sources",
+        ["research_item_id"],
+    )
     op.create_table(
         "knowledge_items",
         sa.Column("id", sa.Uuid(), primary_key=True),
@@ -201,7 +216,13 @@ def upgrade() -> None:
     op.create_table(
         "capabilities",
         sa.Column("id", sa.Uuid(), primary_key=True),
-        sa.Column("technology_id", sa.Uuid(), sa.ForeignKey("technologies.id"), nullable=False, unique=True),
+        sa.Column(
+            "technology_id",
+            sa.Uuid(),
+            sa.ForeignKey("technologies.id"),
+            nullable=False,
+            unique=True,
+        ),
         sa.Column("level", sa.SmallInteger(), nullable=False),
         sa.Column("reason", sa.Text()),
         sa.Column("next_target_level", sa.SmallInteger()),

@@ -5,7 +5,7 @@ Revises: 0001_initial
 Create Date: 2026-09-29
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from alembic import op
@@ -24,7 +24,7 @@ AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000004")
 
 
 def upgrade() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     op.bulk_insert(
         Provider.__table__,
         [
