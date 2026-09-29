@@ -8,7 +8,6 @@ import httpx
 
 from app.ai.providers.base import ProviderAdapter
 from app.ai.schemas import (
-    ChatMessage,
     FinishReason,
     ModelCapabilities,
     ModelEvent,

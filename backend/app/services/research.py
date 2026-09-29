@@ -4,11 +4,13 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.agents.research.agent import research_agent
+from app.ai.container import model_gateway
 from app.db.models import ResearchItem, ResearchSource, Run
 from app.db.session import SessionLocal
 from app.domain.constants import RESEARCH_AGENT_VERSION_ID
 from app.evaluation.research import evaluate_research
 from app.events.publisher import event_publisher
+from app.services.model_registry import ensure_registered_model
 
 
 class ResearchService:

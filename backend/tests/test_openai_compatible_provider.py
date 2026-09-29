@@ -71,7 +71,10 @@ async def test_stream_normalizes_text_and_usage_events() -> None:
         [
             'data: {"choices":[{"delta":{"content":"hello "},"finish_reason":null}]}',
             'data: {"choices":[{"delta":{"content":"world"},"finish_reason":"stop"}]}',
-            'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}',
+            (
+                'data: {"choices":[],"usage":{"prompt_tokens":3,'
+                '"completion_tokens":2,"total_tokens":5}}'
+            ),
             "data: [DONE]",
             "",
         ]
