@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from alembic import op
-
 from app.db.models import Agent, AgentVersion, Model, Provider
 
 revision = "0002_seed_builtin"
