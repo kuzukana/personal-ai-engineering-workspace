@@ -45,7 +45,7 @@ async def validate_public_http_url(
             socket.SOCK_STREAM,
         )
         if not records:
-            raise ValueError("Hostname did not resolve")
+            raise ValueError("Hostname did not resolve") from None
         addresses = {record[4][0] for record in records}
     else:
         addresses = {str(address)}
