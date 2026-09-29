@@ -16,8 +16,8 @@ const sections = [
   {
     title: "Capabilities",
     description: "Track what you can actually build, debug and explain.",
-    href: null,
-    status: "Planned",
+    href: "/capabilities",
+    status: "Available",
   },
   {
     title: "Agent Lab",

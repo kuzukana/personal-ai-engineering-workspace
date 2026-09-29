@@ -77,6 +77,35 @@ export type EvaluationResult = {
   evidence: Record<string, unknown> | null;
 };
 
+export type CapabilityItem = {
+  technology: {
+    id: string;
+    name: string;
+    slug: string;
+    category: string | null;
+    description: string | null;
+  };
+  capability: {
+    id: string;
+    level: number;
+    reason: string | null;
+    next_target_level: number | null;
+    next_action: string | null;
+    updated_at: string;
+  } | null;
+};
+
+export type EvidenceItem = {
+  id: string;
+  title: string;
+  evidence_type: string;
+  description: string | null;
+  url: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type KnowledgeItem = {
   id: string;
   knowledge_type: string;
@@ -172,6 +201,71 @@ export async function getKnowledge(id: string): Promise<KnowledgeItem> {
     `/api/v1/knowledge/${id}`,
   );
   return response.data;
+}
+
+export async function listCapabilities(): Promise<CapabilityItem[]> {
+  const response = await jsonRequest<{ data: CapabilityItem[] }>(
+    "/api/v1/capabilities",
+  );
+  return response.data;
+}
+
+export async function createTechnology(input: {
+  name: string;
+  category: string | null;
+  description: string | null;
+}): Promise<CapabilityItem> {
+  const response = await jsonRequest<{ data: CapabilityItem }>(
+    "/api/v1/capabilities/technologies",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return response.data;
+}
+
+export async function updateCapability(
+  technologyId: string,
+  input: {
+    level: number;
+    reason: string | null;
+    next_target_level: number | null;
+    next_action: string | null;
+  },
+): Promise<CapabilityItem> {
+  const response = await jsonRequest<{ data: CapabilityItem }>(
+    `/api/v1/capabilities/technologies/${technologyId}`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
+  return response.data;
+}
+
+export async function listEvidences(): Promise<EvidenceItem[]> {
+  const response = await jsonRequest<{ data: EvidenceItem[] }>(
+    "/api/v1/capabilities/evidences",
+  );
+  return response.data;
+}
+
+export async function createEvidence(input: {
+  title: string;
+  evidence_type: string;
+  description: string | null;
+  url: string | null;
+}): Promise<EvidenceItem> {
+  const response = await jsonRequest<{ data: EvidenceItem }>(
+    "/api/v1/capabilities/evidences",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return response.data;
+}
+
+export async function linkCapabilityEvidence(
+  capabilityId: string,
+  evidenceId: string,
+): Promise<void> {
+  await jsonRequest(
+    `/api/v1/capabilities/${capabilityId}/evidences/${evidenceId}`,
+    { method: "POST" },
+  );
 }
 
 export function eventsUrl(path: string): string {
