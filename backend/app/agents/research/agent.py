@@ -33,7 +33,11 @@ class ResearchAgent:
         query: str,
         model_id: str,
     ) -> ResearchReport:
+        current_step: tuple[str, int] | None = None
+
         async def step_started(key: str, index: int) -> None:
+            nonlocal current_step
+            current_step = (key, index)
             run_control.raise_if_cancelled(run_id)
             await event_publisher.emit(
                 session,
@@ -44,6 +48,8 @@ class ResearchAgent:
             )
 
         async def step_completed(key: str, index: int) -> None:
+            nonlocal current_step
+            run_control.raise_if_cancelled(run_id)
             await event_publisher.emit(
                 session,
                 run_id,
@@ -51,7 +57,7 @@ class ResearchAgent:
                 "agent_runtime",
                 {"step_key": key, "step_index": index},
             )
-            run_control.raise_if_cancelled(run_id)
+            current_step = None
 
         async def understand(state: ResearchState) -> dict:
             await step_started("understand", 1)
@@ -79,10 +85,26 @@ class ResearchAgent:
                     "risk_level": "LOW",
                 },
             )
-            result = await tool_gateway.execute(
-                "web_search",
-                {"query": state["search_queries"][0]},
-            )
+            try:
+                result = await tool_gateway.execute(
+                    "web_search",
+                    {"query": state["search_queries"][0]},
+                )
+            except Exception as exc:
+                await event_publisher.emit(
+                    session,
+                    run_id,
+                    "tool.failed",
+                    "tool_gateway",
+                    {
+                        "tool_call_id": tool_call_id,
+                        "tool_name": "web_search",
+                        "error_code": type(exc).__name__.upper(),
+                        "message": str(exc)[:500] or "Tool execution failed",
+                        "recoverable": False,
+                    },
+                )
+                raise
             await event_publisher.emit(
                 session,
                 run_id,
@@ -124,13 +146,29 @@ class ResearchAgent:
                         "risk_level": "LOW",
                     },
                 )
-                fetched = await tool_gateway.execute(
-                    "fetch_url",
-                    {
-                        "url": source["url"],
-                        "title": source["title"],
-                    },
-                )
+                try:
+                    fetched = await tool_gateway.execute(
+                        "fetch_url",
+                        {
+                            "url": source["url"],
+                            "title": source["title"],
+                        },
+                    )
+                except Exception as exc:
+                    await event_publisher.emit(
+                        session,
+                        run_id,
+                        "tool.failed",
+                        "tool_gateway",
+                        {
+                            "tool_call_id": tool_call_id,
+                            "tool_name": "fetch_url",
+                            "error_code": type(exc).__name__.upper(),
+                            "message": str(exc)[:500] or "Tool execution failed",
+                            "recoverable": False,
+                        },
+                    )
+                    raise
                 await event_publisher.emit(
                     session,
                     run_id,
@@ -204,12 +242,27 @@ class ResearchAgent:
                 "model_gateway",
                 {"model_call_id": model_call_id, "model": model_id},
             )
-            response = await model_gateway.generate(
-                ModelRequest(
-                    model_id=model_id,
-                    messages=[ChatMessage(role="user", content=prompt)],
+            try:
+                response = await model_gateway.generate(
+                    ModelRequest(
+                        model_id=model_id,
+                        messages=[ChatMessage(role="user", content=prompt)],
+                    )
                 )
-            )
+            except Exception as exc:
+                await event_publisher.emit(
+                    session,
+                    run_id,
+                    "model.failed",
+                    "model_gateway",
+                    {
+                        "model_call_id": model_call_id,
+                        "error_code": type(exc).__name__.upper(),
+                        "message": str(exc)[:500] or "Model request failed",
+                        "recoverable": False,
+                    },
+                )
+                raise
             await event_publisher.emit(
                 session,
                 run_id,
@@ -276,7 +329,25 @@ class ResearchAgent:
         graph.add_edge("verify", "synthesize")
         graph.add_edge("synthesize", END)
 
-        final_state = await graph.compile().ainvoke({"query": query})
+        try:
+            final_state = await graph.compile().ainvoke({"query": query})
+        except Exception as exc:
+            if current_step is not None:
+                step_key, step_index = current_step
+                await event_publisher.emit(
+                    session,
+                    run_id,
+                    "agent.step.failed",
+                    "agent_runtime",
+                    {
+                        "step_key": step_key,
+                        "step_index": step_index,
+                        "error_code": type(exc).__name__.upper(),
+                        "message": str(exc)[:500] or "Agent step failed",
+                        "recoverable": False,
+                    },
+                )
+            raise
         return ResearchReport.model_validate(final_state["report"])
 
 
