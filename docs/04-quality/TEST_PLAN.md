@@ -42,6 +42,7 @@ Implemented tests cover:
 - capability level validation;
 - Knowledge Markdown rendering;
 - Run serialization / Agent Lab metrics.
+- Research Agent tool/model/step failure event tracing.
 
 # 4. Deterministic End-to-End Smoke
 
