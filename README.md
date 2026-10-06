@@ -208,7 +208,7 @@ No real paid model/search API is required for the deterministic CI path.
 - Agent execution still uses in-process background tasks;
 - real-provider smoke requires your own credentials and is intentionally separate from deterministic CI;
 - GitHub repository tool exists in the Tool Gateway but is not yet automatically routed by the Research workflow;
-- no semantic retrieval / embeddings yet;
+- V0.2 retrieval is available below; live semantic quality still requires evaluation;
 - no Learning Agent or Coding Agent yet;
 - no multi-agent orchestration yet.
 
@@ -217,3 +217,31 @@ Those are V0.2+ concerns, not hidden V0.1 requirements.
 ## Core principle
 
 > Use AI to improve how I learn and work, and use my real work to learn how to build better AI agents.
+
+
+## V0.2 Knowledge retrieval (first slice)
+
+After `uv run --no-sync alembic upgrade head`, open `/knowledge` → **Search evidence**
+(`/retrieval`), choose **Index Knowledge**, then search. Saved reports become traceable excerpts
+with Knowledge links, content hashes, character offsets and citation labels.
+
+The default `EMBEDDING_PROVIDER=mock` runs locally and provides a deterministic lexical demo.
+It is not a semantic model. To opt into a compatible embeddings endpoint, set backend
+`EMBEDDING_PROVIDER=http`, `EMBEDDING_BASE_URL` (e.g. a provider's base ending in `/v1`),
+`EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS` and optionally `EMBEDDING_API_KEY`.
+The adapter posts to `<base>/embeddings`; dimensions must match the model's actual output.
+Use HTTPS, or HTTP only on loopback for a local model. Configuration is administrator-controlled.
+Live indexing sends Knowledge text to that provider; live searching sends the query and may incur costs.
+Restart the backend after configuration changes and index again. Index identities include provider,
+base URL, model, dimensions and chunking version, so vectors from different configurations never mix.
+
+Indexes live in PostgreSQL JSON; cosine ranking runs in the API for this small local baseline.
+Limits are 200,000 characters per document and, per configured profile, 10,000 chunks,
+2,000,000 vector components and 5,000,000 source characters. Over-capacity search returns 409
+instead of silently truncating results. Larger corpora need a vector backend.
+Editing content excludes obsolete indexes until reindexing succeeds. Provider failures preserve
+previous stored indexes. In-flight requests return a content-version snapshot, identified by its hash.
+Concurrent requests can duplicate provider work, although database writes remain idempotent;
+indexing is synchronous and has no durable job queue yet.
+
+Learning Agent and Engineering Journal remain planned; this slice does not complete all of V0.2.

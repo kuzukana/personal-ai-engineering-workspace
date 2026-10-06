@@ -56,14 +56,16 @@ async def test_persist_full_query_and_bounded_title(database, monkeypatch, lengt
     monkeypatch.setattr(agent.tool_gateway, "execute", tool)
     monkeypatch.setattr(agent.model_gateway, "generate", mock.generate)
     query = "x" * length
+    before_creation = datetime.now(UTC)
     run = await create_run(query)
+    after_creation = datetime.now(UTC)
     await research.research_service.execute(run.id, query, MOCK_MODEL_ID)
     async with database() as session:
         saved = await session.get(Run, run.id)
         item = await session.scalar(select(ResearchItem).where(ResearchItem.run_id == run.id))
         assert saved.status == "COMPLETED"
         assert item.query == query and len(item.title) == 240
-        assert abs((datetime.now(UTC) - saved.created_at).total_seconds()) < 30
+        assert before_creation <= saved.created_at <= after_creation
 
 
 async def test_cancel_during_evaluation_prevents_report(database, monkeypatch):

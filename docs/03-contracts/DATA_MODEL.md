@@ -1804,3 +1804,18 @@ Experiment / Regression
 核心原则：
 
 > **Persist enough structure to understand what the AI did, what the user learned, and why the system believed the result was useful.**
+
+
+# V0.2 retrieval persistence (migration 0005)
+
+`knowledge_indexes`: UUID primary key; Knowledge foreign key with cascade delete;
+profile SHA-256, content SHA-256, dimensions, chunk_count and aware UTC created_at.
+Unique `(knowledge_id, profile)` prevents duplicate index versions within a configuration.
+
+`knowledge_chunks`: UUID primary key; indexed index_id foreign key with cascade delete;
+ordinal, start_offset, end_offset, source content and normalized embedding vector stored as JSON.
+Unique `(index_id, ordinal)`. Chunk version characters-v1-900-120 uses 900 Unicode code points
+and 120 overlap. Offsets preserve source text; blank chunks are omitted.
+Provider work finishes before a Knowledge row lock; replacement and all chunks commit atomically
+only if the content hash still matches. Old profiles remain available but are never mixed.
+Migration downgrade removes derived indexes/chunks only, retaining Knowledge records.

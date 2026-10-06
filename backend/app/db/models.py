@@ -264,3 +264,31 @@ class CapabilityEvidence(Base):
     capability_id: Mapped[UUID] = mapped_column(ForeignKey("capabilities.id"), primary_key=True)
     evidence_id: Mapped[UUID] = mapped_column(ForeignKey("evidences.id"), primary_key=True)
     created_at: Mapped[datetime] = now_col()
+
+
+class KnowledgeIndex(Base):
+    __tablename__ = "knowledge_indexes"
+    __table_args__ = (
+        UniqueConstraint("knowledge_id", "profile", name="uq_knowledge_index_profile"),
+    )
+    id: Mapped[UUID] = uuid_pk()
+    knowledge_id: Mapped[UUID] = mapped_column(ForeignKey("knowledge_items.id", ondelete="CASCADE"))
+    profile: Mapped[str] = mapped_column(String(64))
+    content_hash: Mapped[str] = mapped_column(String(64))
+    dimensions: Mapped[int]
+    chunk_count: Mapped[int]
+    created_at: Mapped[datetime] = now_col()
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (UniqueConstraint("index_id", "ordinal", name="uq_knowledge_chunk_ordinal"),)
+    id: Mapped[UUID] = uuid_pk()
+    index_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_indexes.id", ondelete="CASCADE"), index=True
+    )
+    ordinal: Mapped[int]
+    start_offset: Mapped[int]
+    end_offset: Mapped[int]
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(JSON)

@@ -150,7 +150,7 @@ These are explicit future quality improvements rather than silently assumed V0.1
 
 # 12. V0.1 Acceptance Follow-ups (2026-10-04)
 
-The earlier review at `2f82247` identified real defects despite passing baseline tests. The findings below are now repaired in the working tree; this maintained checklist replaces the standalone dated review file. No Git commit or remote Actions success is implied.
+The earlier review at `2f82247` identified real defects despite passing baseline tests. The findings below were merged in PR #2 (main commit 60e3afc); this maintained checklist replaces the standalone dated review file. GitHub Actions run 37400491661 passed both backend matrices and frontend.
 
 | IDs | Repair | Regression evidence |
 | --- | --- | --- |
@@ -178,7 +178,7 @@ Additional repairs: safe Markdown rendering with HTML disabled; Knowledge/Run pa
 - Full HTTP Mock Research → events/evaluation → Knowledge → Technology/Capability/Evidence smoke passed on both Python versions.
 - Frontend clean `npm ci`, type generation/check, production build and three Playwright browser tests passed. Local browser tests use installed Chrome because the bundled browser download timed out; CI installs Chromium.
 - Business database upgraded to 0004 without deleting/merging rows. Existing timestamps were not automatically rewritten.
-- No paid provider calls, live SSRF penetration tests or remote GitHub Actions execution were performed. Prompt separation reduces risk; it does not prove immunity to prompt injection or validate factual answer quality.
+- No paid provider calls or live SSRF penetration tests were performed. Remote GitHub Actions passed for PR #2. Prompt separation reduces risk; it does not prove immunity to prompt injection or validate factual answer quality.
 
 ## Reproduction and remaining scope
 
@@ -189,3 +189,22 @@ Use `npm ci`, `npm run typecheck`, `npm run build`, `npx playwright install chro
 Python 3.12 is the default; 3.12–3.14 are supported, with 3.12 and 3.14 tested locally and configured in CI. Locks make installed dependency versions reproducible; platform wheels and Python compatibility markers may differ.
 
 V0.1 remains a local, single-user background-task application. Authentication, durable queue/restart recovery, factual verification, semantic retrieval and agents for later phases remain explicitly outside this repair. Historical timestamp corrections require a separately scoped data audit, not an unconditional shift.
+
+
+# 13. V0.2 retrieval acceptance
+
+Regression coverage: source chunk offsets (including Unicode), vector count/dimensions/finite
+values, response ordering/normalization, UTF-8 citation budget, concurrent indexing idempotency,
+provider failure preservation, stale-content exclusion, edits during provider execution, atomic
+refresh, profile isolation and exact citation offsets. Browser coverage verifies delayed old
+search responses cannot replace new results, citation navigation, index failure and retry.
+The HTTP smoke extends Research → Knowledge with index → search → citation.
+
+`test_demo_retrieval_evaluation` uses three fixed documents and three lexical queries with
+expected Recall@1=1 and MRR=1. This is a deterministic plumbing regression, not evidence of
+semantic relevance, factual correctness or provider-model quality. A representative user corpus
+and opt-in live provider evaluation remain necessary before semantic quality acceptance.
+
+Migration 0005 is checked against models and exercised upgrade/downgrade/upgrade on disposable
+PostgreSQL. Never use TEST_DATABASE_URL against business data. No paid embedding calls are
+required by CI. Production limitations and indexing cost behavior are documented in README.

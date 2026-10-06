@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,12 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://workspace:workspace@localhost:5432/workspace"
     )
     redis_url: str = Field(default="redis://localhost:6379/0")
+
+    embedding_provider: Literal["mock", "http"] = "mock"
+    embedding_base_url: str | None = None
+    embedding_api_key: str | None = None
+    embedding_model: str | None = None
+    embedding_dimensions: int = Field(default=256, ge=1, le=4096)
 
     research_context_window: int = Field(default=32768, ge=1024)
     research_max_output_tokens: int = Field(default=2048, ge=1)
