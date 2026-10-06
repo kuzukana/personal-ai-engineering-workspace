@@ -1,5 +1,9 @@
 from uuid import UUID
 
+from sqlalchemy import select
+
+from app.db.models import Run
+
 
 class RunCancelled(RuntimeError):
     pass
@@ -21,6 +25,12 @@ class RunControl:
 
     def clear(self, run_id: UUID) -> None:
         self._cancelled.discard(run_id)
+
+    async def checkpoint(self, session, run_id: UUID) -> None:
+        self.raise_if_cancelled(run_id)
+        status = await session.scalar(select(Run.status).where(Run.id == run_id))
+        if status == "CANCELLATION_REQUESTED":
+            raise RunCancelled(f"Run cancelled: {run_id}")
 
 
 run_control = RunControl()

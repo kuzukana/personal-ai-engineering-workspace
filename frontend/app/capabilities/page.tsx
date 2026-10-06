@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import {
   CapabilityItem,
@@ -29,25 +29,52 @@ function CapabilityCard({
   const [nextTarget, setNextTarget] = useState(current?.next_target_level ?? 1);
   const [nextAction, setNextAction] = useState(current?.next_action ?? "");
   const [evidenceId, setEvidenceId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
 
   async function save() {
-    const result = await updateCapability(item.technology.id, {
-      level,
-      reason: reason || null,
-      next_target_level: nextTarget,
-      next_action: nextAction || null,
-    });
-    setMessage("Capability saved.");
-    if (!evidenceId && result.capability?.id) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await updateCapability(item.technology.id, {
+        level,
+        reason: reason || null,
+        next_target_level: nextTarget,
+        next_action: nextAction || null,
+      });
+      setMessage("Capability saved.");
       await onRefresh();
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Operation failed. Please retry.");
+      setMessage(null);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   }
 
   async function linkEvidence() {
     if (!current?.id || !evidenceId) return;
-    await linkCapabilityEvidence(current.id, evidenceId);
-    setMessage("Evidence linked.");
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await linkCapabilityEvidence(current.id, evidenceId);
+      setMessage("Evidence linked.");
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Operation failed. Please retry.");
+      setMessage(null);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   return (
@@ -112,7 +139,7 @@ function CapabilityCard({
         />
       </label>
 
-      <button className="secondary-button" onClick={() => void save()} type="button">
+      <button disabled={busy} className="secondary-button" onClick={() => void save()} type="button">
         Save capability
       </button>
 
@@ -132,7 +159,7 @@ function CapabilityCard({
         </select>
         <button
           className="secondary-button"
-          disabled={!current?.id || !evidenceId}
+          disabled={busy || !current?.id || !evidenceId}
           onClick={() => void linkEvidence()}
           type="button"
         >
@@ -140,6 +167,7 @@ function CapabilityCard({
         </button>
       </div>
 
+      {error && <div role="alert" className="error-box">{error}</div>}
       {message && <div className="success-box">{message}</div>}
     </article>
   );
@@ -154,6 +182,9 @@ export default function CapabilitiesPage() {
   const [evidenceType, setEvidenceType] = useState("PROJECT");
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   async function refresh() {
     const [capabilityItems, evidenceItems] = await Promise.all([
@@ -173,28 +204,50 @@ export default function CapabilitiesPage() {
   async function addTechnology(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!technologyName.trim()) return;
-    await createTechnology({
-      name: technologyName.trim(),
-      category: technologyCategory.trim() || null,
-      description: null,
-    });
-    setTechnologyName("");
-    setTechnologyCategory("");
-    await refresh();
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await createTechnology({
+        name: technologyName.trim(),
+        category: technologyCategory.trim() || null,
+        description: null,
+      });
+      setTechnologyName("");
+      setTechnologyCategory("");
+      await refresh();
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Operation failed. Please retry.");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   async function addEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!evidenceTitle.trim()) return;
-    await createEvidence({
-      title: evidenceTitle.trim(),
-      evidence_type: evidenceType,
-      description: null,
-      url: evidenceUrl.trim() || null,
-    });
-    setEvidenceTitle("");
-    setEvidenceUrl("");
-    await refresh();
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await createEvidence({
+        title: evidenceTitle.trim(),
+        evidence_type: evidenceType,
+        description: null,
+        url: evidenceUrl.trim() || null,
+      });
+      setEvidenceTitle("");
+      setEvidenceUrl("");
+      await refresh();
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Operation failed. Please retry.");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   return (
@@ -235,7 +288,7 @@ export default function CapabilitiesPage() {
                 value={technologyCategory}
               />
             </label>
-            <button className="primary-button" type="submit">
+            <button disabled={busy} className="primary-button" type="submit">
               Add technology
             </button>
           </form>
@@ -274,7 +327,7 @@ export default function CapabilitiesPage() {
                 value={evidenceUrl}
               />
             </label>
-            <button className="primary-button" type="submit">
+            <button disabled={busy} className="primary-button" type="submit">
               Add evidence
             </button>
           </form>

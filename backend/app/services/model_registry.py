@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.registry import RegisteredModel
@@ -12,6 +13,11 @@ async def ensure_registered_model(
     model_id: UUID,
     registered: RegisteredModel,
 ) -> None:
+    # Same provider may be registered concurrently with different model keys.
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:key)"),
+        {"key": configured_provider_id(registered.provider).int % (2**63)},
+    )
     existing = await session.get(Model, model_id)
     if existing is not None:
         return

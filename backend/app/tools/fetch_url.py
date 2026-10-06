@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import asynccontextmanager
 from html import unescape
 from html.parser import HTMLParser
 from typing import Any
@@ -9,7 +10,7 @@ from urllib.parse import urljoin
 import httpx
 
 from app.tools.gateway import Tool
-from app.tools.security import validate_public_http_url
+from app.tools.security import resolve_public_http_url
 
 
 class _TextExtractor(HTMLParser):
@@ -53,12 +54,18 @@ class FetchUrlTool(Tool):
         max_bytes: int = 1_000_000,
         max_redirects: int = 3,
     ) -> None:
-        self._client = client or httpx.AsyncClient(
-            timeout=30.0,
-            follow_redirects=False,
-        )
+        self._client = client
         self._max_bytes = max_bytes
         self._max_redirects = max_redirects
+
+    @asynccontextmanager
+    async def _connection(self):
+        if self._client is not None:
+            yield self._client
+        else:
+            # Do not share an IP-origin pool between different TLS/Host names.
+            async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+                yield client
 
     async def execute(self, arguments: dict[str, Any]) -> dict[str, Any]:
         current_url = str(arguments.get("url", "")).strip()
@@ -66,11 +73,16 @@ class FetchUrlTool(Tool):
             raise ValueError("fetch_url requires a URL")
 
         for redirect_index in range(self._max_redirects + 1):
-            await validate_public_http_url(current_url)
-            async with self._client.stream(
+            original = httpx.URL(current_url)
+            addresses = await resolve_public_http_url(str(original))
+            pinned_url = original.copy_with(host=addresses[0])
+            async with self._connection() as client, client.stream(
                 "GET",
-                current_url,
+                pinned_url,
+                follow_redirects=False,
+                extensions={"sni_hostname": original.host},
                 headers={
+                    "Host": original.netloc.decode("ascii"),
                     "User-Agent": "PersonalAIEngineeringWorkspace/0.1",
                     "Accept": (
                         "text/html,text/plain,application/json;q=0.9,*/*;q=0.1"
@@ -117,7 +129,7 @@ class FetchUrlTool(Tool):
                     text = content
 
                 return {
-                    "url": str(response.url),
+                    "url": str(original),
                     "title": title or arguments.get("title"),
                     "content": text[:100_000],
                     "content_type": content_type,

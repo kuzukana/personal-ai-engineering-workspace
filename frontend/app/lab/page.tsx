@@ -9,13 +9,19 @@ export default function AgentLabPage() {
   const [runs, setRuns] = useState<RunDetail[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(false);
   useEffect(() => {
-    listRuns()
-      .then(setRuns)
+    let active = true;
+    setLoading(true);
+    setError(null);
+    listRuns(offset)
+      .then((data) => { if (active) setRuns(data); })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Failed to load runs.");
-      });
-  }, []);
+        if (active) setError(reason instanceof Error ? reason.message : "Failed to load runs.");
+      }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [offset]);
 
   return (
     <main className="workspace-shell">
@@ -40,6 +46,11 @@ export default function AgentLabPage() {
           <span className="mini-status">{runs.length} loaded</span>
         </div>
 
+        <div className="result-actions">
+          <button type="button" disabled={loading || offset === 0} onClick={() => setOffset(offset - 50)}>Previous</button>
+          <span>Page {offset / 50 + 1}</span>
+          <button type="button" disabled={loading || runs.length < 50} onClick={() => setOffset(offset + 50)}>Next</button>
+        </div>
         <div className="run-list">
           {runs.map((run) => (
             <Link className="run-card" href={`/lab/${run.id}`} key={run.id}>

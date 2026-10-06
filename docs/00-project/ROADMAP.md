@@ -1,8 +1,8 @@
 # Personal AI Engineering Workspace — Roadmap
 
 **Version:** 0.1  
-**Status:** V0.1 Implemented  
-**Last Updated:** 2026-09-29
+**Status:** V0.1 Implemented; local regression acceptance passed
+**Last Updated:** 2026-10-04
 
 # 1. Goal
 
@@ -161,6 +161,8 @@ Implemented:
 - Agent Lab frontend.
 
 # 4. V0.1 System Acceptance
+
+The 2026-10-04 review findings have been repaired and verified locally. See [Test Plan, section 12](../04-quality/TEST_PLAN.md#12-v01-acceptance-follow-ups-2026-10-04) for regression evidence and external-provider/remote-CI limits.
 
 GitHub Actions executes:
 

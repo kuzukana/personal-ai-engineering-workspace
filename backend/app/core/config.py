@@ -12,13 +12,16 @@ class Settings(BaseSettings):
     )
 
     app_env: str = Field(default="development")
-    backend_host: str = Field(default="0.0.0.0")
+    backend_host: str = Field(default="127.0.0.1")
     backend_port: int = Field(default=8000)
     frontend_origin: str = Field(default="http://localhost:3000")
     database_url: str = Field(
         default="postgresql+asyncpg://workspace:workspace@localhost:5432/workspace"
     )
     redis_url: str = Field(default="redis://localhost:6379/0")
+
+    research_context_window: int = Field(default=32768, ge=1024)
+    research_max_output_tokens: int = Field(default=2048, ge=1)
 
     openai_api_key: str | None = None
     openai_model: str | None = None

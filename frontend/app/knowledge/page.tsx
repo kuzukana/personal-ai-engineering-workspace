@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { KnowledgeItem, listKnowledge } from "../../lib/api";
 
@@ -11,20 +11,30 @@ export default function KnowledgePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load(search?: string) {
+  const generationRef = useRef(0);
+  const [offset, setOffset] = useState(0);
+  const [activeQuery, setActiveQuery] = useState("");
+
+  async function load(search = "", pageOffset = 0) {
+    const generation = ++generationRef.current;
     setLoading(true);
     setError(null);
     try {
-      setItems(await listKnowledge(search));
+      const result = await listKnowledge(search, pageOffset);
+      if (generation !== generationRef.current) return;
+      setItems(result);
+      setOffset(pageOffset);
+      setActiveQuery(search);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Failed to load knowledge.");
+      if (generation === generationRef.current) setError(reason instanceof Error ? reason.message : "Failed to load knowledge.");
     } finally {
-      setLoading(false);
+      if (generation === generationRef.current) setLoading(false);
     }
   }
 
   useEffect(() => {
     void load();
+    return () => { generationRef.current += 1; };
   }, []);
 
   return (
@@ -70,6 +80,11 @@ export default function KnowledgePage() {
           </p>
         )}
 
+        <div className="result-actions">
+          <button type="button" disabled={loading || offset === 0} onClick={() => void load(activeQuery, offset - 50)}>Previous</button>
+          <span>Page {offset / 50 + 1}</span>
+          <button type="button" disabled={loading || items.length < 50} onClick={() => void load(activeQuery, offset + 50)}>Next</button>
+        </div>
         <div className="knowledge-list">
           {items.map((item) => (
             <Link className="knowledge-card" href={`/knowledge/${item.id}`} key={item.id}>

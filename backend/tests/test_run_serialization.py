@@ -17,6 +17,8 @@ def test_serialize_run_exposes_lab_metrics() -> None:
         latency_ms=1200,
         input_tokens=100,
         output_tokens=50,
+        reasoning_tokens=12,
+        error_message="test failure",
         estimated_cost=0.0123,
         currency="USD",
         created_at=datetime.now(UTC),
@@ -29,3 +31,7 @@ def test_serialize_run_exposes_lab_metrics() -> None:
     assert payload["input_tokens"] == 100
     assert payload["output_tokens"] == 50
     assert payload["estimated_cost"] == 0.0123
+
+    assert payload["reasoning_tokens"] == 12
+    assert payload["currency"] == "USD"
+    assert payload["error_message"] == "test failure"

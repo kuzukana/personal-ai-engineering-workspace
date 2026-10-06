@@ -8,6 +8,7 @@ from app.db.models import (
     KnowledgeItem,
     KnowledgeTechnology,
     ResearchItem,
+    Run,
     Technology,
 )
 from app.db.session import SessionLocal
@@ -76,9 +77,7 @@ def serialize_knowledge(
         "title": item.title,
         "summary": item.summary,
         "content_markdown": item.content_markdown,
-        "source_research_id": (
-            str(item.source_research_id) if item.source_research_id else None
-        ),
+        "source_research_id": (str(item.source_research_id) if item.source_research_id else None),
         "status": item.status,
         "metadata": item.metadata_json or {},
         "technologies": [
@@ -98,17 +97,20 @@ def serialize_knowledge(
 @router.post("/from-research/{run_id}", status_code=201)
 async def save_research_to_knowledge(run_id: UUID) -> dict:
     async with SessionLocal() as session:
+        run = await session.scalar(select(Run).where(Run.id == run_id).with_for_update())
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if run.status != "COMPLETED":
+            raise HTTPException(status_code=409, detail="Only completed runs can be promoted")
         research_result = await session.execute(
             select(ResearchItem).where(ResearchItem.run_id == run_id)
         )
         research = research_result.scalar_one_or_none()
-        if research is None:
+        if research is None or research.status != "COMPLETED":
             raise HTTPException(status_code=404, detail="Research item not found")
 
         existing_result = await session.execute(
-            select(KnowledgeItem).where(
-                KnowledgeItem.source_research_id == research.id
-            )
+            select(KnowledgeItem).where(KnowledgeItem.source_research_id == research.id)
         )
         existing = existing_result.scalar_one_or_none()
         if existing is not None:
@@ -134,9 +136,7 @@ async def save_research_to_knowledge(run_id: UUID) -> dict:
         session.add(item)
         await session.flush()
 
-        technology_result = await session.execute(
-            select(Technology).order_by(Technology.name)
-        )
+        technology_result = await session.execute(select(Technology).order_by(Technology.name))
         candidate_technologies = technology_result.scalars().all()
         searchable = " ".join(
             [
@@ -176,7 +176,7 @@ async def list_knowledge(
         query = (
             select(KnowledgeItem)
             .where(KnowledgeItem.status == "ACTIVE")
-            .order_by(KnowledgeItem.updated_at.desc())
+            .order_by(KnowledgeItem.updated_at.desc(), KnowledgeItem.id)
             .offset(offset)
             .limit(limit)
         )
@@ -192,11 +192,17 @@ async def list_knowledge(
 
         result = await session.execute(query)
         rows = result.scalars().all()
-        data = []
-        for row in rows:
-            technologies = await get_linked_technologies(session, row.id)
-            data.append(serialize_knowledge(row, technologies))
-        return {"data": data}
+        linked: dict[UUID, list[Technology]] = {row.id: [] for row in rows}
+        if linked:
+            relations = await session.execute(
+                select(KnowledgeTechnology.knowledge_id, Technology)
+                .join(Technology, KnowledgeTechnology.technology_id == Technology.id)
+                .where(KnowledgeTechnology.knowledge_id.in_(linked))
+                .order_by(Technology.name)
+            )
+            for knowledge_id, technology in relations:
+                linked[knowledge_id].append(technology)
+        return {"data": [serialize_knowledge(row, linked[row.id]) for row in rows]}
 
 
 @router.get("/{knowledge_id}")
@@ -215,7 +221,9 @@ async def link_knowledge_technology(
     technology_id: UUID,
 ) -> dict:
     async with SessionLocal() as session:
-        knowledge = await session.get(KnowledgeItem, knowledge_id)
+        knowledge = await session.scalar(
+            select(KnowledgeItem).where(KnowledgeItem.id == knowledge_id).with_for_update()
+        )
         technology = await session.get(Technology, technology_id)
         if knowledge is None:
             raise HTTPException(status_code=404, detail="Knowledge item not found")

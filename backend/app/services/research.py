@@ -28,8 +28,7 @@ class ResearchService:
                 input_text=query,
             )
             session.add(run)
-            await session.commit()
-            await session.refresh(run)
+            await session.flush()
             await event_publisher.emit(
                 session,
                 run.id,
@@ -47,12 +46,13 @@ class ResearchService:
         started = datetime.now(UTC)
         async with SessionLocal() as session:
             try:
-                run = await session.get(Run, run_id)
-                if run is None:
+                run = await session.scalar(select(Run).where(Run.id == run_id).with_for_update())
+                if run is None or run.status not in {"PENDING", "CANCELLATION_REQUESTED"}:
                     return
+                if run.status == "CANCELLATION_REQUESTED":
+                    raise RunCancelled(f"Run cancelled: {run_id}")
                 run.status = "RUNNING"
                 run.started_at = started
-                await session.commit()
                 await event_publisher.emit(
                     session,
                     run_id,
@@ -77,31 +77,6 @@ class ResearchService:
                 )
                 run_control.raise_if_cancelled(run_id)
 
-                item = ResearchItem(
-                    run_id=run_id,
-                    title=report.title,
-                    query=query,
-                    summary=report.summary,
-                    report_markdown=report.summary,
-                    structured_result_json=report.model_dump(mode="json"),
-                    status="COMPLETED",
-                )
-                session.add(item)
-                await session.flush()
-
-                for source in report.sources:
-                    session.add(
-                        ResearchSource(
-                            research_item_id=item.id,
-                            url=str(source.url),
-                            title=source.title,
-                            source_type=source.source_type,
-                            content_excerpt=source.snippet,
-                            verification_status=source.verification_status,
-                        )
-                    )
-
-                await session.commit()
                 await event_publisher.emit(
                     session,
                     run_id,
@@ -120,7 +95,18 @@ class ResearchService:
                     },
                 )
 
-                evaluations = await evaluate_research(session, run_id, report)
+                try:
+                    evaluations = await evaluate_research(session, run_id, report)
+                except Exception:
+                    await session.rollback()
+                    await event_publisher.emit(
+                        session,
+                        run_id,
+                        "evaluation.failed",
+                        "evaluation_engine",
+                        {"message": "Evaluation failed"},
+                    )
+                    raise
                 for evaluation in evaluations:
                     await event_publisher.emit(
                         session,
@@ -181,6 +167,39 @@ class ResearchService:
                     if payload.get("currency"):
                         currency = str(payload["currency"])
 
+                run = await session.scalar(
+                    select(Run)
+                    .where(Run.id == run_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                if run.status == "CANCELLATION_REQUESTED":
+                    raise RunCancelled(f"Run cancelled: {run_id}")
+                run_control.raise_if_cancelled(run_id)
+                item = ResearchItem(
+                    run_id=run_id,
+                    title=report.title,
+                    query=query,
+                    summary=report.summary,
+                    report_markdown=report.summary,
+                    structured_result_json=report.model_dump(mode="json"),
+                    status="COMPLETED",
+                )
+                session.add(item)
+                await session.flush()
+
+                for source in report.sources:
+                    session.add(
+                        ResearchSource(
+                            research_item_id=item.id,
+                            url=str(source.url),
+                            title=source.title,
+                            source_type=source.source_type,
+                            content_excerpt=source.snippet,
+                            verification_status=source.verification_status,
+                        )
+                    )
+
                 run.status = "COMPLETED"
                 run.output_text = report.summary
                 run.structured_output_json = report.model_dump(mode="json")
@@ -188,13 +207,9 @@ class ResearchService:
                 run.latency_ms = int((finished - started).total_seconds() * 1000)
                 run.input_tokens = input_tokens if has_input_tokens else None
                 run.output_tokens = output_tokens if has_output_tokens else None
-                run.reasoning_tokens = (
-                    reasoning_tokens if has_reasoning_tokens else None
-                )
+                run.reasoning_tokens = reasoning_tokens if has_reasoning_tokens else None
                 run.estimated_cost = estimated_cost if has_cost else None
                 run.currency = currency
-                await session.commit()
-
                 await event_publisher.emit(
                     session,
                     run_id,
@@ -208,7 +223,6 @@ class ResearchService:
                 if run is not None:
                     run.status = "CANCELLED"
                     run.completed_at = datetime.now(UTC)
-                    await session.commit()
                     await event_publisher.emit(
                         session,
                         run_id,
@@ -219,12 +233,11 @@ class ResearchService:
             except Exception:
                 await session.rollback()
                 run = await session.get(Run, run_id)
-                if run is not None:
+                if run is not None and run.status not in {"COMPLETED", "CANCELLED"}:
                     run.status = "FAILED"
                     run.error_code = "WORKFLOW_ERROR"
                     run.error_message = "Research workflow failed"
                     run.completed_at = datetime.now(UTC)
-                    await session.commit()
                     await event_publisher.emit(
                         session,
                         run_id,

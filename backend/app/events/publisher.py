@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import RunEvent
+from app.db.models import Run, RunEvent
 from app.events.broker import event_broker
 from app.events.schemas import EventEnvelope
 
@@ -19,6 +19,8 @@ class EventPublisher:
         source: str,
         payload: dict[str, Any] | None = None,
     ) -> EventEnvelope:
+        # Serialize sequence allocation with terminal/cancellation transactions.
+        await session.execute(select(Run.id).where(Run.id == run_id).with_for_update())
         result = await session.execute(
             select(func.coalesce(func.max(RunEvent.sequence), 0)).where(RunEvent.run_id == run_id)
         )

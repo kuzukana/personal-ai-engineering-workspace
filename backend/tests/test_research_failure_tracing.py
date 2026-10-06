@@ -1,12 +1,15 @@
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
 from app.agents.research import agent as research_module
+from app.domain.constants import MOCK_MODEL_ID
 
 
 async def _capture_events(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict]]:
     events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(research_module.run_control, "checkpoint", AsyncMock())
 
     async def fake_emit(
         session,
@@ -37,7 +40,7 @@ async def test_research_agent_traces_tool_failure(monkeypatch: pytest.MonkeyPatc
             session=object(),
             run_id=uuid4(),
             query="Compare two agent frameworks",
-            model_id="mock-model",
+            model_id=str(MOCK_MODEL_ID),
         )
 
     event_types = [event_type for event_type, _ in events]
@@ -90,16 +93,14 @@ async def test_research_agent_traces_model_failure(monkeypatch: pytest.MonkeyPat
             session=object(),
             run_id=uuid4(),
             query="Compare two agent frameworks",
-            model_id="mock-model",
+            model_id=str(MOCK_MODEL_ID),
         )
 
     event_types = [event_type for event_type, _ in events]
     assert "model.failed" in event_types
     assert "agent.step.failed" in event_types
 
-    model_failure = next(
-        payload for event_type, payload in events if event_type == "model.failed"
-    )
+    model_failure = next(payload for event_type, payload in events if event_type == "model.failed")
     assert model_failure["error_code"] == "RUNTIMEERROR"
 
     step_failure = next(

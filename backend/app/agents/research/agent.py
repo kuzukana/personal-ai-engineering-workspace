@@ -6,9 +6,9 @@ from uuid import UUID, uuid4
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.research.context import build_request
 from app.agents.research.schemas import ResearchReport, ResearchSourceData
 from app.ai.container import model_gateway
-from app.ai.schemas import ChatMessage, ModelRequest
 from app.events.publisher import event_publisher
 from app.runtime.run_control import run_control
 from app.tools.container import tool_gateway
@@ -38,7 +38,7 @@ class ResearchAgent:
         async def step_started(key: str, index: int) -> None:
             nonlocal current_step
             current_step = (key, index)
-            run_control.raise_if_cancelled(run_id)
+            await run_control.checkpoint(session, run_id)
             await event_publisher.emit(
                 session,
                 run_id,
@@ -49,7 +49,7 @@ class ResearchAgent:
 
         async def step_completed(key: str, index: int) -> None:
             nonlocal current_step
-            run_control.raise_if_cancelled(run_id)
+            await run_control.checkpoint(session, run_id)
             await event_publisher.emit(
                 session,
                 run_id,
@@ -133,7 +133,7 @@ class ResearchAgent:
             await step_started("read_sources", 5)
             enriched: list[dict] = []
             for source in state["selected_sources"]:
-                run_control.raise_if_cancelled(run_id)
+                await run_control.checkpoint(session, run_id)
                 tool_call_id = str(uuid4())
                 await event_publisher.emit(
                     session,
@@ -198,8 +198,8 @@ class ResearchAgent:
                     continue
                 findings.append(
                     {
-                        "claim": evidence,
-                        "evidence": evidence,
+                        "claim": evidence[:1200],
+                        "evidence": evidence[:1200],
                         "source_url": source["url"],
                     }
                 )
@@ -225,16 +225,6 @@ class ResearchAgent:
         async def synthesize(state: ResearchState) -> dict:
             await step_started("synthesize", 8)
             model_call_id = str(uuid4())
-            evidence_lines = [
-                f"- [{item['status']}] {item['claim']} (source: {item['source_url']})"
-                for item in state["verification_results"]
-            ]
-            prompt = (
-                "Write a concise research summary grounded only in the evidence below. "
-                "If the evidence is limited, say so explicitly.\n\n"
-                f"Task: {state['query']}\n\nEvidence:\n"
-                + "\n".join(evidence_lines)
-            )
             await event_publisher.emit(
                 session,
                 run_id,
@@ -244,10 +234,8 @@ class ResearchAgent:
             )
             try:
                 response = await model_gateway.generate(
-                    ModelRequest(
-                        model_id=model_id,
-                        messages=[ChatMessage(role="user", content=prompt)],
-                    )
+                    build_request(model_id, state["query"], state["verification_results"],
+                                  model_gateway.registry.get(model_id).capabilities)
                 )
             except Exception as exc:
                 await event_publisher.emit(
@@ -296,7 +284,7 @@ class ResearchAgent:
                 for source in state["selected_sources"]
             ]
             report = ResearchReport(
-                title=f"Research: {state['query']}",
+                title=f"Research: {state['query']}"[:240],
                 summary=response.content,
                 key_findings=[
                     item["claim"] for item in state["verification_results"]

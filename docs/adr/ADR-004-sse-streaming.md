@@ -24,3 +24,8 @@ WebSocket：能力更强但 MVP 复杂度不必要。Polling：简单但延迟�
 ## Guardrail
 
 当 Coding Agent 需要实时双向 terminal/approval 时再评估 WebSocket；Run/Event contract 不依赖传输协议。
+
+
+## Implementation update — 2026-10-04
+
+The browser still uses SSE. The server now polls persisted events/status once per second and emits heartbeat comments, instead of relying on an in-memory subscription after replay. This trades a small local DB read load for reconnect/terminal recovery and cross-process visibility. Unknown Runs return 404, and exhausted terminal streams close. Durable background execution remains separate future work.

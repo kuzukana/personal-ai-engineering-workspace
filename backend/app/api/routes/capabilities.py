@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import (
     Capability,
@@ -134,9 +135,7 @@ async def create_technology(request: TechnologyCreate) -> dict:
 
     async with SessionLocal() as session:
         duplicate = await session.execute(
-            select(Technology).where(
-                (Technology.name == name) | (Technology.slug == slug)
-            )
+            select(Technology).where((Technology.name == name) | (Technology.slug == slug))
         )
         if duplicate.scalar_one_or_none() is not None:
             raise HTTPException(status_code=409, detail="Technology already exists")
@@ -148,7 +147,11 @@ async def create_technology(request: TechnologyCreate) -> dict:
             description=request.description,
         )
         session.add(technology)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="Technology already exists") from exc
         await session.refresh(technology)
         return {"data": serialize_capability(technology, None)}
 
@@ -156,7 +159,9 @@ async def create_technology(request: TechnologyCreate) -> dict:
 @router.get("/technologies/{technology_id}")
 async def get_technology(technology_id: UUID) -> dict:
     async with SessionLocal() as session:
-        technology = await session.get(Technology, technology_id)
+        technology = await session.scalar(
+            select(Technology).where(Technology.id == technology_id).with_for_update()
+        )
         if technology is None:
             raise HTTPException(status_code=404, detail="Technology not found")
         capability = await _get_capability_for_technology(session, technology_id)
@@ -169,7 +174,9 @@ async def update_technology(
     request: TechnologyUpdate,
 ) -> dict:
     async with SessionLocal() as session:
-        technology = await session.get(Technology, technology_id)
+        technology = await session.scalar(
+            select(Technology).where(Technology.id == technology_id).with_for_update()
+        )
         if technology is None:
             raise HTTPException(status_code=404, detail="Technology not found")
 
@@ -199,7 +206,11 @@ async def update_technology(
             technology.description = request.description
         technology.updated_at = datetime.now(UTC)
 
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="Technology already exists") from exc
         await session.refresh(technology)
         capability = await _get_capability_for_technology(session, technology_id)
         return {"data": serialize_capability(technology, capability)}
@@ -208,23 +219,21 @@ async def update_technology(
 @router.delete("/technologies/{technology_id}", status_code=204)
 async def delete_technology(technology_id: UUID) -> None:
     async with SessionLocal() as session:
-        technology = await session.get(Technology, technology_id)
+        technology = await session.scalar(
+            select(Technology).where(Technology.id == technology_id).with_for_update()
+        )
         if technology is None:
             raise HTTPException(status_code=404, detail="Technology not found")
 
         capability = await _get_capability_for_technology(session, technology_id)
         if capability is not None:
             await session.execute(
-                delete(CapabilityEvidence).where(
-                    CapabilityEvidence.capability_id == capability.id
-                )
+                delete(CapabilityEvidence).where(CapabilityEvidence.capability_id == capability.id)
             )
             await session.delete(capability)
 
         await session.execute(
-            delete(KnowledgeTechnology).where(
-                KnowledgeTechnology.technology_id == technology_id
-            )
+            delete(KnowledgeTechnology).where(KnowledgeTechnology.technology_id == technology_id)
         )
         await session.delete(technology)
         await session.commit()
@@ -236,7 +245,9 @@ async def upsert_capability(
     request: CapabilityUpdate,
 ) -> dict:
     async with SessionLocal() as session:
-        technology = await session.get(Technology, technology_id)
+        technology = await session.scalar(
+            select(Technology).where(Technology.id == technology_id).with_for_update()
+        )
         if technology is None:
             raise HTTPException(status_code=404, detail="Technology not found")
 
@@ -265,9 +276,7 @@ async def upsert_capability(
 @router.get("/evidences")
 async def list_evidences() -> dict:
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(Evidence).order_by(Evidence.updated_at.desc())
-        )
+        result = await session.execute(select(Evidence).order_by(Evidence.updated_at.desc()))
         return {"data": [serialize_evidence(row) for row in result.scalars().all()]}
 
 
@@ -328,9 +337,7 @@ async def delete_evidence(evidence_id: UUID) -> None:
             raise HTTPException(status_code=404, detail="Evidence not found")
 
         await session.execute(
-            delete(CapabilityEvidence).where(
-                CapabilityEvidence.evidence_id == evidence_id
-            )
+            delete(CapabilityEvidence).where(CapabilityEvidence.evidence_id == evidence_id)
         )
         await session.delete(evidence)
         await session.commit()
@@ -339,7 +346,9 @@ async def delete_evidence(evidence_id: UUID) -> None:
 @router.get("/{capability_id}/evidences")
 async def list_capability_evidences(capability_id: UUID) -> dict:
     async with SessionLocal() as session:
-        capability = await session.get(Capability, capability_id)
+        capability = await session.scalar(
+            select(Capability).where(Capability.id == capability_id).with_for_update()
+        )
         if capability is None:
             raise HTTPException(status_code=404, detail="Capability not found")
 
@@ -361,7 +370,9 @@ async def link_capability_evidence(
     evidence_id: UUID,
 ) -> dict:
     async with SessionLocal() as session:
-        capability = await session.get(Capability, capability_id)
+        capability = await session.scalar(
+            select(Capability).where(Capability.id == capability_id).with_for_update()
+        )
         evidence = await session.get(Evidence, evidence_id)
         if capability is None:
             raise HTTPException(status_code=404, detail="Capability not found")

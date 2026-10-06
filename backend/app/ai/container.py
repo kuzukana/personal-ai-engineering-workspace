@@ -21,6 +21,13 @@ def _register_configured_model(
     if not api_key or not model_key or not base_url:
         return
 
+    settings = get_settings()
+    capabilities = capabilities.model_copy(
+        update={
+            "context_window": settings.research_context_window,
+            "max_output_tokens": settings.research_max_output_tokens,
+        }
+    )
     provider = OpenAICompatibleProvider(
         name=provider_name,
         api_key=api_key,

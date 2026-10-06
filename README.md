@@ -114,10 +114,9 @@ DeepSeek and Kimi can also be configured through the OpenAI-compatible adapter u
 
 ```bash
 cd backend
-python -m venv .venv
-pip install -e ".[dev]"
-alembic upgrade head
-uvicorn app.main:app --reload
+uv sync --locked --extra dev
+uv run --no-sync alembic upgrade head
+uv run --no-sync uvicorn app.main:app --host 127.0.0.1 --reload
 ```
 
 API:
@@ -132,13 +131,15 @@ OpenAPI:
 http://localhost:8000/docs
 ```
 
+Python 3.12 is the default development version; 3.12–3.14 are supported, with 3.12 and 3.14 in CI. To use an installed 3.14, add `--python 3.14` to `uv sync` and `uv run`. Commit `backend/uv.lock` and `frontend/package-lock.json`; CI installs these exact resolutions.
+
 ### 4. Frontend
 
 In a second terminal:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -161,9 +162,9 @@ Backend:
 
 ```bash
 cd backend
-ruff check app tests alembic
-pytest -q
-alembic upgrade head
+uv run --no-sync ruff check app tests alembic
+uv run --no-sync pytest -q
+uv run --no-sync alembic upgrade head
 ```
 
 Frontend:
@@ -172,6 +173,8 @@ Frontend:
 cd frontend
 npm run typecheck
 npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
 GitHub Actions additionally starts the migrated API and runs an end-to-end smoke covering:
@@ -194,9 +197,9 @@ No real paid model/search API is required for the deterministic CI path.
 
 - never commit `.env` or API keys;
 - provider credentials remain backend-only;
-- live `fetch_url` validates public HTTP(S) destinations and re-validates redirects;
+- live `fetch_url` pins connections to validated public IPs, preserves Host/TLS names, ignores proxy environment variables, and re-validates redirects;
 - Research Agent V0.1 only uses LOW-risk tools;
-- external content is treated as untrusted data.
+- external content is isolated as untrusted evidence under system instructions, with bounded excerpts and a conservative context budget. Set `RESEARCH_CONTEXT_WINDOW` / `RESEARCH_MAX_OUTPUT_TOKENS` to the smallest limits of your configured live models; defaults are 32768 / 2048. These controls reduce prompt-injection risk; they do not establish factual correctness.
 
 ## Known V0.1 limits
 
