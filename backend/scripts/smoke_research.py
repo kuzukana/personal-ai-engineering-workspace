@@ -36,9 +36,7 @@ def main() -> None:
 
         models = client.get(f"{BASE_URL}/api/v1/models")
         models.raise_for_status()
-        assert any(
-            model["id"] == MOCK_MODEL_ID for model in models.json()["data"]
-        )
+        assert any(model["id"] == MOCK_MODEL_ID for model in models.json()["data"])
 
         technology = client.post(
             f"{BASE_URL}/api/v1/capabilities/technologies",
@@ -73,15 +71,11 @@ def main() -> None:
         assert report["sources"]
         assert report["key_findings"]
 
-        evaluations = client.get(
-            f"{BASE_URL}/api/v1/runs/{run_id}/evaluations"
-        )
+        evaluations = client.get(f"{BASE_URL}/api/v1/runs/{run_id}/evaluations")
         evaluations.raise_for_status()
         assert len(evaluations.json()["data"]) >= 4
 
-        events = client.get(
-            f"{BASE_URL}/api/v1/runs/{run_id}/events/history"
-        )
+        events = client.get(f"{BASE_URL}/api/v1/runs/{run_id}/events/history")
         events.raise_for_status()
         event_types = {event["type"] for event in events.json()["data"]}
         required_events = {
@@ -93,15 +87,27 @@ def main() -> None:
         }
         assert required_events.issubset(event_types), event_types
 
-        knowledge = client.post(
-            f"{BASE_URL}/api/v1/knowledge/from-research/{run_id}"
-        )
+        knowledge = client.post(f"{BASE_URL}/api/v1/knowledge/from-research/{run_id}")
         knowledge.raise_for_status()
         knowledge_id = knowledge.json()["data"]["id"]
         detail = client.get(f"{BASE_URL}/api/v1/knowledge/{knowledge_id}")
         detail.raise_for_status()
         linked_technologies = detail.json()["data"]["technologies"]
         assert any(item["name"] == "LangGraph" for item in linked_technologies)
+
+        invalid_search = client.post(f"{BASE_URL}/api/v1/retrieval/search", json={"query": "   "})
+        assert invalid_search.status_code == 422
+        indexed = client.post(f"{BASE_URL}/api/v1/retrieval/index/{knowledge_id}")
+        indexed.raise_for_status()
+        assert indexed.json()["data"]["chunk_count"] > 0
+        retrieved = client.post(
+            f"{BASE_URL}/api/v1/retrieval/search",
+            json={"query": "LangGraph PydanticAI", "top_k": 20},
+        )
+        retrieved.raise_for_status()
+        hits = retrieved.json()["data"]["hits"]
+        assert any(hit["knowledge_id"] == knowledge_id for hit in hits)
+        assert "[K1]" in retrieved.json()["data"]["context"]
 
         technology_update = client.patch(
             f"{BASE_URL}/api/v1/capabilities/technologies/{technology_id}",
@@ -153,9 +159,7 @@ def main() -> None:
         capability_evidence.raise_for_status()
         assert len(capability_evidence.json()["data"]) == 1
 
-        delete_evidence = client.delete(
-            f"{BASE_URL}/api/v1/capabilities/evidences/{evidence_id}"
-        )
+        delete_evidence = client.delete(f"{BASE_URL}/api/v1/capabilities/evidences/{evidence_id}")
         delete_evidence.raise_for_status()
 
         delete_technology = client.delete(

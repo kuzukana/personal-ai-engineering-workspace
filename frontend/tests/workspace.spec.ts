@@ -120,3 +120,43 @@ test("Capability mutations show errors and allow retry", async ({ page }) => {
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("");
   expect(posts).toBe(2);
 });
+
+
+test("Retrieval ignores old responses, keeps citations, and retries indexing", async ({ page }) => {
+  let release!: () => void;
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  let requested!: () => void;
+  const oldRequest = new Promise<void>(resolve => { requested = resolve; });
+  let attempts = 0;
+  await page.route("http://127.0.0.1:8099/**", async route => {
+    if (route.request().url().endsWith("/index")) {
+      attempts++;
+      await route.fulfill(attempts === 1 ? { status: 502, json: { detail: "Provider unavailable" } } :
+        { json: { data: { results: [{ knowledge_id: "new" }], errors: [], next_cursor: null } } });
+      return;
+    }
+    const query = route.request().postDataJSON().query;
+    if (query === "old") { requested(); await delayed; }
+    await route.fulfill({ json: { data: { mode: "demo", model: "demo", indexed_documents: 1,
+      stale_documents: 1, context: `[K1] ${query} evidence`, hits: [{ knowledge_id: query,
+        ordinal: 0, title: query, citation: "K1", text: `${query} evidence`, score: 0.8,
+        start_offset: 0, end_offset: 12, content_hash: "hash", source_research_id: null }] } } });
+  });
+  await page.goto("/retrieval");
+  await page.getByRole("button", { name: "Index Knowledge", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Provider unavailable" })).toBeVisible();
+  await page.getByRole("button", { name: "Index Knowledge", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("1 Knowledge items");
+  await page.getByRole("textbox", { name: "Search saved evidence" }).fill("old");
+  await page.getByRole("button", { name: "Search evidence", exact: true }).click();
+  await oldRequest;
+  await page.getByRole("textbox", { name: "Search saved evidence" }).fill("new");
+  await page.getByRole("button", { name: "Search evidence", exact: true }).click();
+  await expect(page.getByRole("link", { name: "[K1] new", exact: true })).toHaveAttribute("href", "/knowledge/new");
+  const oldResponse = page.waitForResponse(response => response.request().postDataJSON()?.query === "old");
+  release();
+  await oldResponse;
+  await expect(page.getByRole("heading", { name: "[K1] old", exact: true })).toHaveCount(0);
+  await expect(page.getByText(/outdated documents were excluded/)).toBeVisible();
+  expect(attempts).toBe(2);
+});

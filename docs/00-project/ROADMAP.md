@@ -1,8 +1,8 @@
 # Personal AI Engineering Workspace — Roadmap
 
-**Version:** 0.1  
-**Status:** V0.1 Implemented; local regression acceptance passed
-**Last Updated:** 2026-10-04
+**Version:** 0.2 (first slice)
+**Status:** V0.1 accepted in PR #2; V0.2 retrieval slice implemented
+**Last Updated:** 2026-10-06
 
 # 1. Goal
 
@@ -207,8 +207,14 @@ Still intentionally deferred:
 
 # 6. V0.2 — Learning Loop
 
-Planned:
-- semantic retrieval;
+First slice implemented: versioned Knowledge chunking, deterministic local embedding demo,
+configurable HTTP embedding adapter, exact cosine retrieval, citation context budget and
+`/retrieval` UI. Content edits invalidate old results; indexing failures preserve prior indexes.
+The default demo validates plumbing, not real semantic relevance. See TEST_PLAN section 13.
+
+Remaining acceptance work:
+- opt-in live embedding quality evaluation on representative personal queries;
+- scalable vector backend when local exact-search limits are reached;
 - Learning Agent;
 - Engineering Journal;
 - incident knowledge;

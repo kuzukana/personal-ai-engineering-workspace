@@ -6,6 +6,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.models import router as models_router
 from app.api.routes.research import router as research_router
+from app.api.routes.retrieval import router as retrieval_router
 from app.api.routes.runs import router as runs_router
 from app.core.config import get_settings
 
@@ -30,3 +31,4 @@ app.include_router(knowledge_router)
 app.include_router(models_router)
 app.include_router(research_router)
 app.include_router(runs_router)
+app.include_router(retrieval_router)

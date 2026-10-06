@@ -342,3 +342,28 @@ Planned:
 - approval APIs;
 - provider administration APIs;
 - versioned semantic Knowledge search.
+
+
+# V0.2 retrieval slice
+
+All routes retain the local single-user trust boundary and `{ "data": ... }` envelope.
+
+| Route | Contract |
+| --- | --- |
+| `POST /api/v1/retrieval/index/{knowledge_id}` | Index one active Knowledge item; unchanged content/configuration returns `changed: false`. |
+| `POST /api/v1/retrieval/index?after_id=<UUID>&limit=20` | UUID keyset batches, limit 1–50; returns `results`, per-item `errors`, `next_cursor` (null on final page). Provider failure stops the batch with 502; earlier successes persist and retries are idempotent. Concurrent inserts before the cursor need another pass. |
+| `POST /api/v1/retrieval/search` | JSON `query` (trimmed, 1–2000 chars), `top_k` (1–20, default 5), `context_budget_bytes` (256–16000, default 6000). |
+
+Index responses include profile/model/dimensions/mode, Knowledge ID, changed and chunk_count.
+Search returns `hits`, `context`, `indexed_documents`, `stale_documents`, profile/model/dimensions/mode.
+Each hit includes Knowledge ID/title, source Research ID (nullable), ordinal, exact excerpt,
+content SHA-256, start/end offsets, cosine score and citation label `K1`, etc. Offsets are
+zero-based Unicode code points, end-exclusive, in content_markdown (fallback summary/title).
+Context budgeting may shorten a hit; its end offset describes the returned excerpt.
+Returned context is untrusted evidence, not instructions. Clients must render it as text.
+Stale content and non-active Knowledge are excluded. Results describe the snapshot read at request time.
+
+404: missing/inactive item. 409: concurrent edit or exact-search capacity exceeded.
+413: document over 200,000 characters. 422: malformed/invalid input. 502: embedding failure.
+Changing profile requires indexing again; existing profiles are preserved. The offline demo's
+similarity is lexical, not a semantic quality score. Live adapter calls are opt-in and billable.

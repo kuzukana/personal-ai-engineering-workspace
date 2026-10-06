@@ -154,7 +154,13 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `Request failed with ${response.status}`);
+    let message = `Request failed with ${response.status}`;
+    try {
+      const parsed: unknown = JSON.parse(body);
+      if (parsed && typeof parsed === "object" && "detail" in parsed && typeof parsed.detail === "string")
+        message = parsed.detail;
+    } catch { /* Non-JSON failures retain a concise status message. */ }
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;
@@ -309,4 +315,29 @@ export function eventsUrl(path: string): string {
     return path;
   }
   return `${API_BASE_URL}${path}`;
+}
+
+
+export type RetrievalResult = {
+  mode: "demo" | "semantic";
+  model: string;
+  indexed_documents: number;
+  stale_documents: number;
+  context: string;
+  hits: Array<{ knowledge_id: string; title: string; ordinal: number; text: string;
+    citation: string; score: number; start_offset: number; end_offset: number;
+    content_hash: string; source_research_id: string | null }>;
+};
+
+export async function retrieveKnowledge(query: string): Promise<RetrievalResult> {
+  return (await jsonRequest<{ data: RetrievalResult }>("/api/v1/retrieval/search", {
+    method: "POST", body: JSON.stringify({ query }),
+  })).data;
+}
+
+export async function indexKnowledgeBatch(cursor: string | null) {
+  const suffix = cursor ? `?after_id=${encodeURIComponent(cursor)}` : "";
+  return (await jsonRequest<{ data: { next_cursor: string | null;
+    results: Array<{ knowledge_id: string }>; errors: Array<{ knowledge_id: string; message: string }> } }>(
+      `/api/v1/retrieval/index${suffix}`, { method: "POST" })).data;
 }

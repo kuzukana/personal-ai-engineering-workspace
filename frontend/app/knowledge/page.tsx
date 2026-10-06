@@ -45,6 +45,7 @@ export default function KnowledgePage() {
             ← Workspace
           </Link>
           <p className="eyebrow">Knowledge · V0.1</p>
+          <Link className="back-link" href="/retrieval">Search evidence →</Link>
           <h1 className="workspace-title">Reusable research, not disposable answers.</h1>
           <p className="lead">
             Promote useful Research runs into durable Knowledge items and revisit them later.
