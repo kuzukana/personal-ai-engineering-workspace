@@ -54,7 +54,7 @@ Development:
 
 ```bash
 cd backend
-alembic upgrade head
+uv run --no-sync alembic upgrade head
 ```
 
 Current migrations include:
@@ -68,7 +68,8 @@ No manual schema drift should be introduced outside migrations.
 
 ```bash
 cd backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv sync --locked --extra dev
+uv run --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Development may add `--reload`.
@@ -77,7 +78,7 @@ Development may add `--reload`.
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -90,7 +91,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 # 7. Health
 
 - `/health` — process liveness;
-- `/ready` — dependency readiness.
+- `/ready` — database readiness with a two-second deadline; 503 when unavailable. Redis is optional.
 
 # 8. CI
 
@@ -154,3 +155,12 @@ Future destructive migrations should follow expand → migrate → contract rath
 # 14. Final Principle
 
 > Deployment should reproduce the same product contracts across environments while keeping secrets, data and runtime state explicitly separated.
+
+
+## V0.1 repair operations (2026-10-04)
+
+- Local Compose publishes PostgreSQL and Redis only on 127.0.0.1. Apply port changes with `docker compose up -d --wait postgres redis`; named PostgreSQL data is retained. Do not use `down -v` for this change.
+- Migration `0004_knowledge_source_unique` prevents duplicate Knowledge promotion. It refuses existing duplicate source groups rather than deleting records. Reconcile duplicates explicitly if its preflight fails.
+- ORM timestamp defaults now use aware UTC. Existing naive-default records are not automatically shifted: identify the writer timezone and affected records (for example, by comparing Run creation with event times), back up data and scope any historical correction. Rows written in UTC environments must not receive an unconditional +8-hour shift.
+- A single local API process remains the supported execution topology. Persisted SSE/cancellation and serialized event sequences improve recovery, but there is still no durable queue or automatic resumption after process death.
+- The review fixes were checked without paid model/search calls. Configure context limits for live providers before enabling them; real-provider behavior needs a separate opt-in smoke.

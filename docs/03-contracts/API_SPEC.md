@@ -106,7 +106,7 @@ Returns:
 - input / output;
 - structured output;
 - latency;
-- input/output tokens;
+- input/output/reasoning tokens;
 - estimated cost and currency when available;
 - error code/message;
 - timestamps.
@@ -115,7 +115,7 @@ Returns:
 
 Returns `202` with `CANCELLATION_REQUESTED`.
 
-Cancellation is cooperative/best-effort. The runtime checks cancellation at Research workflow boundaries.
+Cancellation remains cooperative: it does not interrupt an in-flight HTTP call. The request is persisted as `CANCELLATION_REQUESTED` and checked at workflow boundaries and finalization. Cancellation and final commit lock the same Run row: cancellation committed first prevents successful result publication; finalization committed first makes cancellation return 409. A completed Research result, Run terminal status and terminal event are committed together. Evaluation execution failure emits `evaluation.failed` and fails the Run without publishing a Research result.
 
 # 7. Run Events
 
@@ -137,6 +137,8 @@ text/event-stream
 Supports:
 - `Last-Event-ID`;
 - `after_sequence`.
+
+Unknown Runs return 404 before streaming. Events are read from PostgreSQL, with one-second polling/heartbeats and no open DB session while waiting on the client. A terminal Run with no remaining events closes immediately; reconnect does not depend on an in-process broker.
 
 Terminal event types:
 - `run.completed`

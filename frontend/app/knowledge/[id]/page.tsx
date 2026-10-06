@@ -1,5 +1,6 @@
 "use client";
 
+import Markdown from "react-markdown";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,11 +14,15 @@ export default function KnowledgeDetailPage() {
 
   useEffect(() => {
     if (!params.id) return;
+    let active = true;
+    setItem(null);
+    setError(null);
     getKnowledge(params.id)
-      .then(setItem)
+      .then((data) => { if (active) setItem(data); })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Failed to load knowledge.");
+        if (active) setError(reason instanceof Error ? reason.message : "Failed to load knowledge.");
       });
+    return () => { active = false; };
   }, [params.id]);
 
   return (
@@ -44,7 +49,7 @@ export default function KnowledgeDetailPage() {
             </div>
           )}
           <div className="knowledge-content">
-            <pre>{item.content_markdown || "No content."}</pre>
+            <Markdown skipHtml>{item.content_markdown || "No content."}</Markdown>
           </div>
         </article>
       )}

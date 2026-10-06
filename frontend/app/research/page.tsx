@@ -10,6 +10,7 @@ import {
   RunDetail,
   RunEvent,
   createResearch,
+  cancelRun,
   eventsUrl,
   getEvaluations,
   getResearchByRun,
@@ -74,6 +75,9 @@ export default function ResearchPage() {
   const [submitting, setSubmitting] = useState(false);
   const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [knowledgeMessage, setKnowledgeMessage] = useState<string | null>(null);
+  const generationRef = useRef(0);
+  const loadRevisionRef = useRef(0);
+  const [cancelling, setCancelling] = useState(false);
   const sourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -91,6 +95,7 @@ export default function ResearchPage() {
       });
     return () => {
       active = false;
+      generationRef.current += 1;
       sourceRef.current?.close();
     };
   }, []);
@@ -100,62 +105,96 @@ export default function ResearchPage() {
     [models, selectedModelId],
   );
 
-  async function loadFinalState(id: string) {
-    const [runResult, evaluationResult] = await Promise.all([
-      getRun(id),
-      getEvaluations(id),
-    ]);
-    setRun(runResult);
+  async function loadFinalState(id: string, generation: number) {
+    const revision = ++loadRevisionRef.current;
+    const [runResult, evaluationResult] = await Promise.all([getRun(id), getEvaluations(id)]);
+    const researchResult = runResult.status === "COMPLETED" ? await getResearchByRun(id) : null;
+    if (generation !== generationRef.current || revision !== loadRevisionRef.current) return;
+    setRun((current) => {
+      const order: Record<string, number> = { PENDING: 0, RUNNING: 1, CANCELLATION_REQUESTED: 2,
+        COMPLETED: 3, FAILED: 3, CANCELLED: 3 };
+      return current?.id === id && order[current.status] > order[runResult.status] ? current : runResult;
+    });
     setEvaluations(evaluationResult);
-
-    if (runResult.status === "COMPLETED") {
-      try {
-        setResearch(await getResearchByRun(id));
-      } catch {
-        setResearch(null);
-      }
+    if (researchResult) setResearch(researchResult);
+    if (["COMPLETED", "FAILED", "CANCELLED"].includes(runResult.status)) {
+      sourceRef.current?.close();
+      sourceRef.current = null;
     }
   }
 
-  function connectEvents(id: string, path: string) {
+  function connectEvents(id: string, path: string, generation: number) {
     sourceRef.current?.close();
     const source = new EventSource(eventsUrl(path));
     sourceRef.current = source;
-
     for (const type of KNOWN_EVENTS) {
       source.addEventListener(type, (message) => {
+        if (generation !== generationRef.current) return;
         const event = JSON.parse((message as MessageEvent<string>).data) as RunEvent;
-        setEvents((current) => {
-          if (current.some((item) => item.id === event.id)) {
-            return current;
-          }
-          return [...current, event].sort((a, b) => a.sequence - b.sequence);
-        });
-
+        if (event.run_id !== id) return;
+        setEvents((current) => current.some((item) => item.id === event.id) ? current :
+          [...current, event].sort((a, b) => a.sequence - b.sequence));
+        if (type === "run.started") setRun((current) => current?.id === id ?
+          { ...current, status: current.status === "CANCELLATION_REQUESTED" ? current.status : "RUNNING" } : current);
         if (TERMINAL_EVENTS.includes(type)) {
+          setRun((current) => current?.id === id ? { ...current, status: type.slice(4).toUpperCase() } : current);
           source.close();
           sourceRef.current = null;
-          void loadFinalState(id).catch((reason: unknown) => {
-            setError(
-              reason instanceof Error ? reason.message : "Failed to load final run state.",
-            );
+          void loadFinalState(id, generation).catch((reason: unknown) => {
+            if (generation === generationRef.current) setError(
+              reason instanceof Error ? reason.message : "Failed to load final run state.");
           });
         }
       });
     }
-
     source.onerror = () => {
-      if (source.readyState === EventSource.CLOSED) {
-        return;
-      }
+      if (generation !== generationRef.current) return;
+      void loadFinalState(id, generation).catch(() => {
+        if (generation === generationRef.current) setError("Connection interrupted. Retrying…");
+      });
     };
+  }
+
+  useEffect(() => {
+    if (!runId || (run && ["COMPLETED", "FAILED", "CANCELLED"].includes(run.status))) return;
+    const generation = generationRef.current;
+    let pending = false;
+    const timer = setInterval(() => {
+      if (pending || generation !== generationRef.current) return;
+      pending = true;
+      void loadFinalState(runId, generation).catch(() => {
+        if (generation === generationRef.current) setError("Unable to refresh run. Retrying…");
+      }).finally(() => { pending = false; });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [runId, run?.status]);
+
+  async function handleCancel() {
+    if (!runId || cancelling) return;
+    const generation = generationRef.current;
+    setCancelling(true);
+    setError(null);
+    try {
+      await cancelRun(runId);
+      if (generation === generationRef.current) setRun((current) => current &&
+        !["COMPLETED", "FAILED", "CANCELLED"].includes(current.status) ?
+        { ...current, status: "CANCELLATION_REQUESTED" } : current);
+    } catch (reason) {
+      if (generation === generationRef.current) setError(reason instanceof Error ? reason.message : "Cancel failed.");
+    } finally {
+      if (generation === generationRef.current) setCancelling(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!query.trim() || !selectedModelId) return;
 
+    const generation = ++generationRef.current;
     sourceRef.current?.close();
+    setRunId(null);
+    setCancelling(false);
+    setSavingKnowledge(false);
     setSubmitting(true);
     setError(null);
     setRun(null);
@@ -166,6 +205,7 @@ export default function ResearchPage() {
 
     try {
       const created = await createResearch(query.trim(), selectedModelId);
+      if (generation !== generationRef.current) return;
       setRunId(created.run_id);
       setRun({
         id: created.run_id,
@@ -186,25 +226,28 @@ export default function ResearchPage() {
         started_at: null,
         completed_at: null,
       });
-      connectEvents(created.run_id, created.events_url);
+      connectEvents(created.run_id, created.events_url, generation);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Failed to start research.");
+      if (generation === generationRef.current) setError(reason instanceof Error ? reason.message : "Failed to start research.");
     } finally {
-      setSubmitting(false);
+      if (generation === generationRef.current) setSubmitting(false);
     }
   }
 
   async function handleSaveKnowledge() {
-    if (!runId) return;
+    if (!runId || research?.run_id !== runId) return;
+    const generation = generationRef.current;
+    setError(null);
     setSavingKnowledge(true);
     setKnowledgeMessage(null);
     try {
       const item = await saveResearchToKnowledge(runId);
+      if (generation !== generationRef.current) return;
       setKnowledgeMessage(`Saved to Knowledge: ${item.title}`);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Failed to save Knowledge.");
+      if (generation === generationRef.current) setError(reason instanceof Error ? reason.message : "Failed to save Knowledge.");
     } finally {
-      setSavingKnowledge(false);
+      if (generation === generationRef.current) setSavingKnowledge(false);
     }
   }
 
@@ -285,6 +328,10 @@ export default function ResearchPage() {
         <div className="panel">
           <div className="panel-heading">
             <h2>Live timeline</h2>
+            {run && !["COMPLETED", "FAILED", "CANCELLED"].includes(run.status) && (
+              <button className="secondary-button" type="button" disabled={cancelling || run.status === "CANCELLATION_REQUESTED"}
+                onClick={() => void handleCancel()}>Cancel research</button>
+            )}
             {run && <span className={`status-pill status-${run.status.toLowerCase()}`}>{run.status}</span>}
           </div>
 

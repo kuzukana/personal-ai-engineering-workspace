@@ -2,7 +2,7 @@
 
 **Version:** 0.1  
 **Status:** Implemented for V0.1 baseline  
-**Last Updated:** 2026-09-29
+**Last Updated:** 2026-10-04
 
 # 1. Principle
 
@@ -11,7 +11,7 @@ Deterministic engineering remains deterministic. AI nondeterminism must not make
 # 2. Current CI Gates
 
 Backend:
-- editable install with dev dependencies;
+- `uv sync --locked --extra dev` on Python 3.12 and 3.14;
 - Ruff;
 - Pytest;
 - Alembic upgrade from clean PostgreSQL;
@@ -19,9 +19,10 @@ Backend:
 - end-to-end HTTP smoke.
 
 Frontend:
-- npm install;
+- `npm ci`;
 - TypeScript typecheck;
-- Next.js production build.
+- Next.js production build;
+- Playwright browser regression tests.
 
 # 3. Current Unit / Contract Coverage
 
@@ -113,10 +114,7 @@ Current CI verifies:
 - all TypeScript surfaces compile;
 - all pages and routes included in the Next.js application production build.
 
-Future:
-- component tests;
-- EventSource reducer tests;
-- browser E2E with Playwright.
+Playwright currently covers Research lifecycle/old-response isolation and save target, Knowledge search races and safe Markdown, and mutation error/retry behavior. API responses are mocked for deterministic UI testing. Component-level coverage remains future work.
 
 # 9. Regression Strategy
 
@@ -140,7 +138,6 @@ Not yet implemented as CI gates:
 - frontend component/unit test runner;
 - secret scanner;
 - dependency audit gate;
-- Playwright;
 - live provider smoke;
 - failure-injection matrix for every workflow node;
 - performance/load tests.
@@ -150,3 +147,45 @@ These are explicit future quality improvements rather than silently assumed V0.1
 # 11. Final Principle
 
 > Make deterministic engineering deterministic; isolate AI nondeterminism instead of letting it infect the test suite.
+
+# 12. V0.1 Acceptance Follow-ups (2026-10-04)
+
+The earlier review at `2f82247` identified real defects despite passing baseline tests. The findings below are now repaired in the working tree; this maintained checklist replaces the standalone dated review file. No Git commit or remote Actions success is implied.
+
+| IDs | Repair | Regression evidence |
+| --- | --- | --- |
+| V01-01 | Aware UTC ORM defaults; no blanket historical data rewrite. | UTC assertion and real PostgreSQL creation-time checks. |
+| V01-02 | Display title capped at 240 characters; complete query retained. | Agent and DB persistence for 230, 231 and 10,000 characters. |
+| V01-03 | Validated IP is the actual HTTP target; preserve Host/TLS name, disable ambient proxies, recheck redirects, reject non-global and credential URLs. | DNS-rebinding simulation checks one resolution and numeric target/SNI; redirect change to private address rejected. |
+| V01-04, V01-14 | Compose and local API instructions bind loopback. | Actual Compose PostgreSQL/Redis bindings checked after recreation; data volume retained. |
+| V01-05 | Persist cancellation and serialize it with final commit via the Run row lock. | Cancellation during evaluation prevents a result; final-commit winner returns 409 to late cancellation. |
+| V01-06 | Source uniqueness migration plus serialized promotion; only completed Runs/results may be promoted. | Six simultaneous saves yield one Knowledge ID and exactly one created result. |
+| V01-07 | SSE validates Run, reads durable status/events, sends heartbeats and closes exhausted terminal replay. | Unknown Run 404, terminal cursor exhaustion, and active-stream recovery from persisted terminal event. |
+| V01-08, V01-09 | System-level trust instructions, separate external JSON, bounded excerpts, conservative byte/token budget and explicit output budget; live model limits configurable. | Adversarial/large Unicode and escaped text under 2048/8192/32768 contexts; oversized task rejected. No real-model attack claim. |
+| V01-10 | Bounded database readiness probe; 503 on failure, Redis optional. | Healthy/down dependency tests and local readiness check. |
+| V01-11 | Explicit Run response schema including currency, error_message and reasoning_tokens. | Serialization contract and HTTP smoke. |
+| V01-12 | Error feedback, pending states and duplicate-submission guards for capability/technology/evidence writes. | Browser 409/retry test. |
+| V01-13, V01-16 | Research generation guards, lifecycle updates, cancellation UI and fallback polling; save target must match displayed report. | Browser delayed-old-result test, RUNNING display and correct save target. |
+| V01-15 | Publish Research only with successful final Run/event transaction; trace evaluator exceptions. | Injected evaluation failure leaves FAILED Run, no Research result and evaluation.failed event. |
+| V01-17 | Knowledge search ignores superseded async responses. | Browser out-of-order search regression. |
+
+Additional repairs: safe Markdown rendering with HTML disabled; Knowledge/Run pagination controls; batched Knowledge relations instead of N+1; concurrency control for initial model registration, capability upsert and relation linking; serialized event-sequence allocation. Concurrent database tests cover registration, evidence linking and eight event publishers. Dependency locks are included for both runtimes, and CI installs them strictly.
+
+## Verification
+
+- Python 3.12 and 3.14: 55 tests passed, including PostgreSQL regressions; Ruff passed. Tests use isolated disposable databases. The previous asyncio deprecation warnings are gone after the test dependency update.
+- Clean database upgrade to 0004, downgrade to 0003 and upgrade again passed; Alembic check found no model/schema difference.
+- Full HTTP Mock Research → events/evaluation → Knowledge → Technology/Capability/Evidence smoke passed on both Python versions.
+- Frontend clean `npm ci`, type generation/check, production build and three Playwright browser tests passed. Local browser tests use installed Chrome because the bundled browser download timed out; CI installs Chromium.
+- Business database upgraded to 0004 without deleting/merging rows. Existing timestamps were not automatically rewritten.
+- No paid provider calls, live SSRF penetration tests or remote GitHub Actions execution were performed. Prompt separation reduces risk; it does not prove immunity to prompt injection or validate factual answer quality.
+
+## Reproduction and remaining scope
+
+Run ordinary unit tests with `uv run --no-sync pytest -q`; PostgreSQL tests skip unless `TEST_DATABASE_URL` points to an explicitly disposable, migrated database. These tests create data. Never point that variable at a personal/business database. CI uses its throwaway PostgreSQL service.
+
+Use `npm ci`, `npm run typecheck`, `npm run build`, `npx playwright install chromium`, then `npm run test:e2e`. `PLAYWRIGHT_CHANNEL=chrome` can select an installed Chrome for local testing.
+
+Python 3.12 is the default; 3.12–3.14 are supported, with 3.12 and 3.14 tested locally and configured in CI. Locks make installed dependency versions reproducible; platform wheels and Python compatibility markers may differ.
+
+V0.1 remains a local, single-user background-task application. Authentication, durable queue/restart recovery, factual verification, semantic retrieval and agents for later phases remain explicitly outside this repair. Historical timestamp corrections require a separately scoped data audit, not an unconditional shift.

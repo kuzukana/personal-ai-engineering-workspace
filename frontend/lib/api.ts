@@ -44,6 +44,7 @@ export type RunDetail = {
   latency_ms: number | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  reasoning_tokens?: number | null;
   estimated_cost: number | null;
   currency: string | null;
   error_code: string | null;
@@ -181,8 +182,8 @@ export async function createResearch(
   return response.data;
 }
 
-export async function listRuns(): Promise<RunDetail[]> {
-  const response = await jsonRequest<{ data: RunDetail[] }>("/api/v1/runs");
+export async function listRuns(offset = 0): Promise<RunDetail[]> {
+  const response = await jsonRequest<{ data: RunDetail[] }>(`/api/v1/runs?limit=50&offset=${offset}`);
   return response.data;
 }
 
@@ -220,14 +221,15 @@ export async function saveResearchToKnowledge(runId: string): Promise<KnowledgeI
   return response.data;
 }
 
-export async function listKnowledge(query?: string): Promise<KnowledgeItem[]> {
-  const suffix = query?.trim()
-    ? `?q=${encodeURIComponent(query.trim())}`
-    : "";
-  const response = await jsonRequest<{ data: KnowledgeItem[] }>(
-    `/api/v1/knowledge${suffix}`,
-  );
+export async function listKnowledge(query?: string, offset = 0): Promise<KnowledgeItem[]> {
+  const params = new URLSearchParams({ limit: "50", offset: String(offset) });
+  if (query?.trim()) params.set("q", query.trim());
+  const response = await jsonRequest<{ data: KnowledgeItem[] }>(`/api/v1/knowledge?${params}`);
   return response.data;
+}
+
+export async function cancelRun(id: string): Promise<void> {
+  await jsonRequest(`/api/v1/runs/${id}/cancel`, { method: "POST" });
 }
 
 export async function getKnowledge(id: string): Promise<KnowledgeItem> {

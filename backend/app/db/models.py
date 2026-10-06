@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -27,7 +27,7 @@ def uuid_pk() -> Mapped[UUID]:
 
 
 def now_col() -> Mapped[datetime]:
-    return mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class Provider(Base):
@@ -197,6 +197,7 @@ class ResearchSource(Base):
 
 class KnowledgeItem(Base):
     __tablename__ = "knowledge_items"
+    __table_args__ = (UniqueConstraint("source_research_id", name="uq_knowledge_source"),)
     id: Mapped[UUID] = uuid_pk()
     knowledge_type: Mapped[str] = mapped_column(String(40))
     title: Mapped[str] = mapped_column(String(240))

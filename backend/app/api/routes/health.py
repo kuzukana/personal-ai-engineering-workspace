@@ -1,4 +1,10 @@
+import asyncio
+
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+
+from app.db.session import SessionLocal
 
 router = APIRouter(tags=["health"])
 
@@ -9,9 +15,19 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/ready")
-async def ready() -> dict[str, object]:
-    # Dependency probes are added when database/Redis clients are wired.
+async def ready():
+    try:
+        async with asyncio.timeout(2), SessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "dependencies": {"database": "unavailable", "redis": "optional"},
+            },
+        )
     return {
         "status": "ready",
-        "dependencies": {"database": "not_configured", "redis": "not_configured"},
+        "dependencies": {"database": "ready", "redis": "optional"},
     }

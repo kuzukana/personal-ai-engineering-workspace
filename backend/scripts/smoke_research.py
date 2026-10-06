@@ -1,8 +1,9 @@
+import os
 import time
 
 import httpx
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = os.getenv("SMOKE_BASE_URL", "http://127.0.0.1:8000")
 MOCK_MODEL_ID = "00000000-0000-0000-0000-000000000002"
 
 
