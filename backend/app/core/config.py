@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     backend_port: int = Field(default=8000)
     frontend_origin: str = Field(default="http://localhost:3000")
     database_url: str = Field(
-        default="postgresql+asyncpg://workspace:workspace@localhost:5432/workspace"
+        default="postgresql+asyncpg://workspace:workspace@127.0.0.1:5432/workspace"
     )
     redis_url: str = Field(default="redis://localhost:6379/0")
 

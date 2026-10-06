@@ -208,3 +208,10 @@ and opt-in live provider evaluation remain necessary before semantic quality acc
 Migration 0005 is checked against models and exercised upgrade/downgrade/upgrade on disposable
 PostgreSQL. Never use TEST_DATABASE_URL against business data. No paid embedding calls are
 required by CI. Production limitations and indexing cost behavior are documented in README.
+
+
+First-slice CI run 37401978295 passed: Python 3.12/3.14, 75 backend tests,
+Ruff, migration consistency, HTTP smoke, frontend build/typecheck and four browser tests.
+Local Windows connection diagnosis measured localhost at about 2.1 seconds versus IPv4
+loopback at about 0.03 seconds; database defaults now match the Compose IPv4 binding.
+The UTC regression checks creation-time bounds instead of depending on total task duration.
